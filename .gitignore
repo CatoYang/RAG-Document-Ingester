@@ -1,0 +1,4 @@
+data/*
+GEMINI.md
+.venv
+__pycache__*
