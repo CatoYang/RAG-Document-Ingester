@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from rich.console import Console
 
-from src.core.interfaces import BaseChunker, Document, Chunk
+from src.core.interfaces import BaseChunker, Document, Chunk, SourceMetadata
 
 console = Console()
 
@@ -33,7 +33,7 @@ class MarkdownChunker(BaseChunker):
             chunk_overlap=self.chunk_overlap,
         )
 
-    def chunk(self, doc: Document) -> List[Chunk]:
+    async def chunk(self, doc: Document) -> List[Chunk]:
         console.print(f"[dim]Chunking {doc.source_file}...[/dim]")
         
         # 1. Split by Markdown headers
@@ -43,11 +43,26 @@ class MarkdownChunker(BaseChunker):
         splits = self.text_splitter.split_documents(md_splits)
         
         chunks = []
-        for s in splits:
-            # Combine document-level metadata with chunk-level metadata
+        for i, s in enumerate(splits):
             combined_meta = doc.metadata.copy()
             combined_meta.update(s.metadata)
             
-            chunks.append(Chunk(text=s.page_content, metadata=combined_meta))
+            # Determine section from headers if present
+            section = None
+            if "Header 1" in s.metadata:
+                section = s.metadata["Header 1"]
+            elif "Header 2" in s.metadata:
+                section = s.metadata["Header 2"]
+            elif "Header 3" in s.metadata:
+                section = s.metadata["Header 3"]
+                
+            source_metadata = SourceMetadata(
+                filename=doc.source_file,
+                page_number=combined_meta.get("page_number", None),
+                section=section,
+                chunk_index=i
+            )
+            
+            chunks.append(Chunk(text=s.page_content, source_metadata=source_metadata, metadata=combined_meta))
             
         return chunks

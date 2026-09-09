@@ -1,6 +1,13 @@
 from abc import ABC, abstractmethod
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List
+
+class SourceMetadata(BaseModel):
+    """Metadata representing the source of a chunk."""
+    filename: str
+    page_number: Optional[int] = None
+    section: Optional[str] = None
+    chunk_index: int
 
 class Document(BaseModel):
     """Data model representing a parsed document."""
@@ -12,7 +19,7 @@ class BaseExtractor(ABC):
     """Abstract base class for all document extractors."""
     
     @abstractmethod
-    def extract(self, file_path: str, **kwargs) -> Document:
+    async def extract(self, file_path: str, **kwargs) -> Document:
         """
         Extracts content from a file and returns a Document object.
         
@@ -44,26 +51,44 @@ class BaseRouter(ABC):
 class Chunk(BaseModel):
     """Data model representing a chunk of text."""
     text: str
-    metadata: Dict[str, Any]
+    source_metadata: SourceMetadata
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class BaseChunker(ABC):
     """Abstract base class for all chunkers."""
     
     @abstractmethod
-    def chunk(self, doc: Document) -> list[Chunk]:
+    async def chunk(self, doc: Document) -> List[Chunk]:
         pass
 
 class BaseEmbedder(ABC):
     """Abstract base class for all embedders."""
     
     @abstractmethod
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(self, texts: List[str]) -> List[List[float]]:
         pass
 
 class BaseVectorStore(ABC):
     """Abstract base class for all vector stores."""
     
     @abstractmethod
-    def upsert(self, chunks: list[Chunk], embeddings: list[list[float]]):
+    async def upsert(self, chunks: List[Chunk], embeddings: List[List[float]]):
+        pass
+
+class BaseSummariser(ABC):
+    """Abstract base class for interchangeable LLM summarisation providers."""
+    
+    @abstractmethod
+    async def summarise(self, text: str, context: Optional[str] = None) -> str:
+        """
+        Summarises the given text.
+        
+        Args:
+            text: The text to summarise.
+            context: Optional context to guide the summarisation.
+            
+        Returns:
+            str: The generated summary.
+        """
         pass
 

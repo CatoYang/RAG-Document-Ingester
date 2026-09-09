@@ -1,4 +1,6 @@
 import argparse
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
 from rich.console import Console
 
 from src.pipeline import IngestionPipeline
@@ -6,7 +8,9 @@ from src.indexing.pipeline import IndexingPipeline
 
 console = Console()
 
-def main():
+import asyncio
+
+async def async_main():
     parser = argparse.ArgumentParser(description="Enterprise Document Ingestion Pipeline for RAG")
     parser.add_argument(
         "--action",
@@ -18,8 +22,8 @@ def main():
     parser.add_argument(
         "--config", 
         type=str, 
-        default="config.yaml", 
-        help="Path to the YAML configuration file (default: config.yaml)"
+        default="config/config.yaml", 
+        help="Path to the YAML configuration file (default: config/config.yaml)"
     )
     parser.add_argument(
         "--file",
@@ -34,17 +38,20 @@ def main():
         pipeline = IngestionPipeline(config_path=args.config)
         
         if args.file:
-            pipeline.process_file(args.file)
+            await pipeline.process_file(args.file)
         else:
-            pipeline.process_targets()
+            await pipeline.process_targets()
             
     elif args.action == "index":
         console.print(f"[bold blue]Starting Indexing Pipeline[/bold blue] (Config: {args.config})")
-        pipeline = IndexingPipeline(config_path=args.config)
-        # We index everything in staging_markdown
-        pipeline.process_directory("data/staging_markdown")
+        pipeline = IndexingPipeline()
+        await pipeline.initialize(args.config)
+        await pipeline.process_directory(pipeline.config.get("pipeline", {}).get("output_dir", "data/staging_markdown"))
         
     console.print("[bold green]Pipeline execution completed.[/bold green]")
+
+def main():
+    asyncio.run(async_main())
 
 if __name__ == "__main__":
     main()

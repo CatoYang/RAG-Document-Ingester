@@ -1,12 +1,21 @@
-# RAG Document Ingester
+# Primer
 
 An enterprise-grade, configuration-driven document processing pipeline designed to prepare heterogeneous files for Retrieval-Augmented Generation (RAG). 
 
 Built heavily upon **SOLID** principles, this framework avoids hardcoding and relies entirely on dynamic registries and a central `config.yaml` to orchestrate file extraction, cleaning, chunking, and embedding.
 
+```
+This project was a quick experiment into RAG but i came into a lot of cleaning issues with old PDFs.  
+I intended to fully complete it but decided to pivot once i learnt that rag is great for retrieving naive tokens, but terrible at nuanced context.
+
+Specifically i was building this to guide me through a problem i had with creative writing and wanted the model to have the context of everything written. But slowly realised that for better results i need to properly change the way the information is stored.   
+
+So instead of rag pulling things that may not have the specific meaning, i would need to create a hierarchical retrieval system and index the critical information of the documents so that the models can load the relevent information.  
+```
+
 ---
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 The system is cleanly divided into two major phases:
 
@@ -38,7 +47,7 @@ graph TD
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 ├── main.py                     # CLI Entry point
@@ -70,7 +79,7 @@ graph TD
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 1. **WSL2** (Ubuntu recommended)
@@ -89,7 +98,7 @@ pip install -r requirements.txt
 
 ---
 
-## ⚙️ Usage
+## Usage
 
 The CLI (`main.py`) acts as the entry point for both phases of the pipeline.
 
@@ -113,7 +122,7 @@ python main.py --action index
 
 ---
 
-## 🛠️ Configuration (`config.yaml`)
+## Configuration (`config.yaml`)
 
 This framework avoids hardcoding entirely. Everything is configurable via `config.yaml`.
 
@@ -156,7 +165,7 @@ indexing:
 
 ---
 
-## 🧠 Extending the Framework
+## Extending the Framework
 
 To adhere to SOLID principles, you should **never** modify the `IngestionPipeline` or `IndexingPipeline` directly to add new formats. 
 

@@ -1,0 +1,17 @@
+{
+  "update-master-config": {
+    "enabled": true,
+    "PostToolUse": [
+      {
+        "matcher": "replace_file_content|write_to_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/generate_master_config.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
