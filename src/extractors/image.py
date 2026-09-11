@@ -10,9 +10,10 @@ from src.core.interfaces import BaseExtractor, Document
 
 console = Console()
 
+
 class ImageVLMExtractor(BaseExtractor):
     """Tier 3 Extractor: Uses Ollama Vision Models for standalone images."""
-    
+
     def __init__(self, **kwargs):
         self.model = kwargs.get("model", "minicpm-v")
         self.dpi = kwargs.get("dpi", 300)
@@ -30,15 +31,15 @@ class ImageVLMExtractor(BaseExtractor):
             "2. If you cannot read a word, output [UNREADABLE].\n"
             "3. Preserve the original layout, paragraphs, headers, and lists.\n"
             "4. Do not add any conversational text, explanations, or summaries.\n\n"
-            "Output ONLY the transcribed markdown."
-        )
+            "Output ONLY the transcribed markdown.")
 
     def _get_ollama_client(self):
         """Returns an Ollama client, automatically adjusting for WSL2 networking."""
         host = "http://127.0.0.1:11434"
         if "WSL_DISTRO_NAME" in os.environ:
             try:
-                result = subprocess.run(['ip', 'route'], capture_output=True, text=True, check=True)
+                result = subprocess.run(
+                    ['ip', 'route'], capture_output=True, text=True, check=True)
                 for line in result.stdout.split('\n'):
                     if line.startswith('default via'):
                         wsl_ip = line.split(' ')[2]
@@ -50,12 +51,13 @@ class ImageVLMExtractor(BaseExtractor):
 
     def extract(self, file_path: str, **kwargs) -> Document:
         file_path_obj = Path(file_path)
-        
-        console.print(f"[cyan]Extracting {file_path_obj.name} with {self.model}...[/cyan]")
-        
+
+        console.print(
+            f"[cyan]Extracting {file_path_obj.name} with {self.model}...[/cyan]")
+
         with open(file_path_obj, "rb") as img_file:
             image_bytes = img_file.read()
-            
+
         options = {}
         if self.temperature is not None:
             options['temperature'] = self.temperature
@@ -67,7 +69,7 @@ class ImageVLMExtractor(BaseExtractor):
             options['top_p'] = self.top_p
         if self.seed is not None:
             options['seed'] = self.seed
-            
+
         response = self.client.chat(
             model=self.model,
             messages=[
@@ -79,27 +81,26 @@ class ImageVLMExtractor(BaseExtractor):
             ],
             options=options
         )
-        
+
         md_text = response['message']['content'].strip()
-        
+
         try:
             version = importlib.metadata.version("ollama")
         except importlib.metadata.PackageNotFoundError:
             version = "unknown"
-            
+
         metadata = {
             "source": file_path_obj.name,
-            "date_ingested": datetime.now().replace(microsecond=0).isoformat(' '),
+            "date_ingested": datetime.now().replace(
+                microsecond=0).isoformat(' '),
             "extractor": {
                 "program": "ollama",
                 "version": version,
                 "model": self.model,
-                "mode": "image_vision"
-            }
-        }
+                "mode": "image_vision"}}
         if self.temperature is not None:
             metadata["extractor"]["temperature"] = self.temperature
-        
+
         return Document(
             source_file=file_path_obj.name,
             content=md_text,

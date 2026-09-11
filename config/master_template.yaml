@@ -8,10 +8,21 @@
 # ==============================================================================
 
 pipeline:
-  mode: extract_and_clean
+  steps:
+    extract:
+      enabled: true
+      save_intermediate: false
+      intermediate_suffix: _raw
+    clean:
+      enabled: true
+      save_intermediate: false
+      intermediate_suffix: _clean
   targets:
   - data/raw
   output_dir: data/staging/staging_markdown
+  deduplication:
+    enabled: true
+    method: exact
   dynamic_cleaner:
     enabled: true
     provider: ollama

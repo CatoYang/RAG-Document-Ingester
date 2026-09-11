@@ -1,6 +1,7 @@
 data/*
 GEMINI.md
 .venv
+.env
 __pycache__*
 config/*
 !config/master_template.yaml

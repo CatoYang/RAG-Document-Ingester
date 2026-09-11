@@ -5,12 +5,18 @@ An enterprise-grade, configuration-driven document processing pipeline designed 
 Built heavily upon **SOLID** principles, this framework avoids hardcoding and relies entirely on dynamic registries and a central configuration system to orchestrate file extraction, cleaning, chunking, and embedding.
 
 ```
-This project was a quick experiment into RAG but i came into a lot of cleaning issues with old PDFs.  
-I intended to fully complete it but decided to pivot once i learnt that rag is great for retrieving naive tokens, but terrible at nuanced context.
+This project was a quick experiment into RAG but i came into a lot of cleaning issues with old PDFs, poorly scanned documents that required OCR.  
+Because of that i found that i ran into processing times going into several hours per document.   
+Cleaning was also problematic as each document was inconsistent and standardisation meant having several steps for verification, intervention for each batch 
 
-Specifically i was building this to guide me through a problem i had with creative writing and wanted the model to have the context of everything written. But slowly realised that for better results i need to properly change the way the information is stored.   
+Even before i started indexing strategies i had to spend a lot more time configuring different methods to transcribe documents into markdown.  
+I had aimmed to have this pipeline work at enterprise and local environments so i had to consider using Local models for OCR as well as processing using APIs.  
 
-So instead of rag pulling things that may not have the specific meaning, i would need to create a hierarchical retrieval system and index the critical information of the documents so that the models can load the relevent information.  
+Also tried to utilise free APIs by doing batch processing of extracted images to feed into the APIs for text extraction as extracting images within the PDFs quickly ran into problems with requests per minute limits.  
+
+Then im realising that feeding the visual models a high DPI image of the entire page is a waste of processing and have to build a new substep to extract out text regions to save on processing....
+
+This project is continuously being developed as a tool.
 ```
 
 ---
@@ -113,7 +119,7 @@ To run exact deduplication and convert files in `data/raw/` into cleaned markdow
 ```bash
 python main.py --config config/config.yaml --action extract
 ```
-*Note: You can control the behavior of this phase via the `pipeline.mode` setting (e.g., `extract_and_clean`, `extract_only`, `clean_only`).*
+*Note: You can control the behavior of this phase via the `pipeline.steps` setting (e.g., toggling the `extract` or `clean` steps, and setting `save_intermediate: true` to dump uncleaned raw output).*
 
 **To run a single file:**
 ```bash
@@ -138,14 +144,15 @@ The pipeline's full schema is defined by Pydantic models in `src/config/settings
 You should reference `config/master_template.yaml` to see all possible options you can pass into your active `config.yaml` profile.
 
 ### Extractor Routing
-You can define exact behavior based on file extensions. For example:
+You can define exact behavior based on file extensions. For example, to handle PDFs using the Google Gemini Mega-Batch architecture:
 ```yaml
 file_rules:
-  .docx:
-    extractor: "DocxExtractor"
-    fallback: "UniversalExtractor"
+  .pdf:
+    extractor: "FreeTierMegaBatchExtractor" # Options: FreeTierMegaBatchExtractor, EnterpriseBatchExtractor, HybridPdfExtractor
+    fallback: "PdfTextExtractor"
     params:
-      strip_comments: true
+      vlm_model: "gemini-3.7-flash"
+      dpi: 300
 ```
 
 ### Cleaner Module

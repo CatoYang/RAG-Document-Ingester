@@ -6,6 +6,7 @@ from src.core.interfaces import BaseEmbedder
 
 console = Console()
 
+
 class OllamaEmbedder(BaseEmbedder):
     """Embeds text using a local Ollama model asynchronously."""
 
@@ -15,8 +16,9 @@ class OllamaEmbedder(BaseEmbedder):
         self.client = AsyncClient()
 
     async def embed(self, texts: List[str]) -> List[List[float]]:
-        console.print(f"[dim]Generating embeddings using Ollama ({self.model}) for {len(texts)} chunks...[/dim]")
-        
+        console.print(
+            f"[dim]Generating embeddings using Ollama ({self.model}) for {len(texts)} chunks...[/dim]")
+
         embeddings = []
         for text in texts:
             try:
@@ -25,5 +27,5 @@ class OllamaEmbedder(BaseEmbedder):
             except Exception as e:
                 console.print(f"[red]Error generating embedding: {e}[/red]")
                 raise e
-                
+
         return embeddings

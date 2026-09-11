@@ -1,4 +1,3 @@
-import os
 import hashlib
 from typing import List, Dict
 from pathlib import Path
@@ -6,6 +5,7 @@ from rich.console import Console
 from src.config.settings import DeduplicationSettings
 
 console = Console()
+
 
 class DocumentDeduplicator:
     def __init__(self, config: DeduplicationSettings):
@@ -23,12 +23,13 @@ class DocumentDeduplicator:
         """Filters out exact duplicate files using a two-stage size and hash check."""
         if not self.config.enabled:
             return files
-            
+
         if self.config.method != "exact":
-            console.print(f"[yellow]Warning: Deduplication method '{self.config.method}' is not fully implemented yet. Using 'exact'.[/yellow]")
+            console.print(
+                f"[yellow]Warning: Deduplication method '{self.config.method}' is not fully implemented yet. Using 'exact'.[/yellow]")
 
         console.print("[dim]Running deduplication pass...[/dim]")
-        
+
         # Stage 1: Group by file size
         size_map: Dict[int, List[Path]] = {}
         for file in files:
@@ -37,7 +38,7 @@ class DocumentDeduplicator:
                 size_map.setdefault(size, []).append(file)
             except OSError as e:
                 console.print(f"[red]Error reading size for {file}: {e}[/red]")
-                
+
         unique_files: List[Path] = []
         hash_map: Dict[str, Path] = {}
         duplicate_count = 0
@@ -54,17 +55,21 @@ class DocumentDeduplicator:
                         file_hash = self._hash_file(file)
                         if file_hash in hash_map:
                             duplicate_count += 1
-                            console.print(f"[yellow]Skipping duplicate: '{file.name}' (identical to '{hash_map[file_hash].name}')[/yellow]")
+                            console.print(
+                                f"[yellow]Skipping duplicate: '{file.name}' (identical to '{hash_map[file_hash].name}')[/yellow]")
                         else:
                             hash_map[file_hash] = file
                             unique_files.append(file)
                     except OSError as e:
                         console.print(f"[red]Error hashing {file}: {e}[/red]")
-                        unique_files.append(file) # Fail safe: process it anyway
+                        # Fail safe: process it anyway
+                        unique_files.append(file)
 
         if duplicate_count > 0:
-            console.print(f"[bold green]Deduplication complete. Filtered {duplicate_count} duplicate files.[/bold green]")
+            console.print(
+                f"[bold green]Deduplication complete. Filtered {duplicate_count} duplicate files.[/bold green]")
         else:
-            console.print(f"[dim]Deduplication complete. No exact duplicates found.[/dim]")
-            
+            console.print(
+                f"[dim]Deduplication complete. No exact duplicates found.[/dim]")
+
         return unique_files

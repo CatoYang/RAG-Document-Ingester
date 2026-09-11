@@ -6,7 +6,8 @@ pydantic>=2.0
 markitdown
 epub2txt
 aiofiles
-google-generativeai
+google-genai
+tenacity
 chromadb
 qdrant-client
 langchain-text-splitters
