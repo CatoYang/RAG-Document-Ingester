@@ -6,7 +6,13 @@ When operating in this directory and its subdirectories, you MUST adhere to the 
 2. **Strict Typing:** All Python code MUST use strict type hinting (e.g., using the `typing` module or modern built-in types).
 3. **Pydantic Models for Chunks:** All text chunks extracted by parsers MUST be returned as Pydantic models. These models MUST contain source metadata (such as filename, page number, and chunk index).
 
-## SOLID Principles Enforcement
+## Environment Execution Rules
+
+1. **WSL Ubuntu Execution:** The primary execution environment for this project is Ubuntu via WSL. Because agents operate from a Windows host context, **all pipeline commands and python scripts MUST be executed through WSL**. 
+   - Never run `python ...` directly in the Windows PowerShell.
+   - Always route commands into WSL using the format: `wsl --cd "/home/cato/RAG Document Ingester" python ...` or `wsl bash -c "..."`
+
+## Architectural Rules
 
 You MUST adhere to SOLID principles for all architectural designs and code modifications:
 

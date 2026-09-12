@@ -1,9 +1,9 @@
 from typing import Type
 
 from src.core.interfaces import BaseChunker, BaseEmbedder, BaseVectorStore
-from src.indexing.chunkers import MarkdownChunker
-from src.indexing.embedders import OllamaEmbedder
-from src.indexing.vectorstores import ChromaDBStore, QdrantStore
+from src.index.chunkers import MarkdownChunker
+from src.index.embedders import OllamaEmbedder
+from src.index.vectorstores import ChromaDBStore, QdrantStore
 
 CHUNKER_REGISTRY = {
     "MarkdownChunker": MarkdownChunker,

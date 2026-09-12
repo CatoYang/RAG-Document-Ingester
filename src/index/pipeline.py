@@ -6,7 +6,7 @@ from pathlib import Path
 from rich.console import Console
 
 from src.core.interfaces import Document
-from src.indexing.registry import get_chunker_class, get_embedder_class, get_vectorstore_class
+from src.index.registry import get_chunker_class, get_embedder_class, get_vectorstore_class
 
 console = Console()
 
@@ -48,7 +48,7 @@ class IndexingPipeline:
         self.vectorstore = vectorstore_cls(**vectorstore_cfg.get('params', {}))
 
         # Instantiate SummarisationPipeline
-        from src.summarisation.pipeline import SummarisationPipeline
+        from src.summary.pipeline import SummarisationPipeline
         self.summarisation = SummarisationPipeline()
         await self.summarisation.initialize(config_path)
 

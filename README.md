@@ -16,8 +16,9 @@ Also tried to utilise free APIs by doing batch processing of extracted images to
 
 Then im realising that feeding the visual models a high DPI image of the entire page is a waste of processing and have to build a new substep to extract out text regions to save on processing....
 
-This project is continuously being developed as a tool.
-```
+Then i moved to use the Marker package but found myself in dependency hell and my current hardware choking as vLLM demanded more than i can provide and it works terribly on WSL.  
+Decided to take time off to get another ubuntu bootable to work on to continue developing.  
+As of now, a older version (marker 0.3.10) works out of the box and im using it mainly for layout recognition.  
 
 ---
 
@@ -26,7 +27,7 @@ This project is continuously being developed as a tool.
 The system is cleanly divided into three major phases:
 
 ### Phase 1: Pre-processing, Extraction & Cleaning
-Filters exact duplicates using a two-stage Size + SHA-256 hash deduplicator. It then converts highly diverse file formats (PDFs, Word docs, Spreadsheets, HTML, presentations, and images) into standardized, clean Markdown. It utilizes Vision Language Models (VLMs) via Ollama for complex PDFs and images, alongside robust python libraries (`pandas`, `python-docx`, `beautifulsoup4`) for text-heavy documents.
+Filters exact duplicates using a two-stage Size + SHA-256 hash deduplicator. It then converts highly diverse file formats (PDFs, Word docs, Spreadsheets, HTML, presentations, and images) into standardized, clean Markdown. It utilizes native GPU OCR models (Marker/Surya) for complex PDFs and images, alongside robust python libraries (`pandas`, `python-docx`, `beautifulsoup4`) for text-heavy documents.
 
 ### Phase 2: Hierarchical Summarisation (Agentic RAG)
 Generates high-level document and section summaries using an LLM (Ollama or Gemini) prior to chunking, ensuring semantic context is preserved for the index.
@@ -40,7 +41,7 @@ graph TD
     PRE --> B[Phase 1: Ingestion Pipeline]
     B --> C{Document Router}
     
-    C -->|PDF/Images| D[VLM Extractor\nOllama]
+    C -->|PDF/Images| D[Marker/Surya OCR\nPyTorch GPU]
     C -->|Word/Excel/HTML| E[Structured Extractors]
     C -->|Archives| F[Archive Unpacker]
     
@@ -107,6 +108,10 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+> [!IMPORTANT]
+> **Dependency Pinning & Architecture Note**
+> We specifically use `marker-pdf==0.3.10`, `surya-ocr==0.6.13`, and `transformers==4.41.2`. Newer versions of `marker-pdf` (>= 1.0) forcibly deprecate the native PyTorch layout models in favor of the `surya-ocr-2` Vision Language Model. This VLM requires deploying a memory-heavy `vLLM` Docker server, which introduces severe API latency and hardware constraints. By pinning to the `0.3.x` branch, the pipeline seamlessly orchestrates the native layout extraction directly on the host GPU without a daemon server, avoiding severe memory overhead.
 
 ---
 

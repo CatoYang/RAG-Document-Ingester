@@ -4,7 +4,7 @@ from rich.console import Console
 
 from src.core.interfaces import BaseRouter, BaseExtractor
 from src.config.settings import Config
-from src.extractors.registry import get_extractor_class
+from src.extract.registry import get_extractor_class
 
 console = Console()
 
