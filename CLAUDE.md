@@ -16,7 +16,7 @@ Earlier agent sessions pushed models and environments beyond this machine (the v
 - **GPU: RTX 3060, 12 GB VRAM, ~1 GB already in use at idle.** The same card serves WSL and Windows processes, including Ollama.
 - `.venv`: Python 3.12.3, torch 2.13.0+cu130 (CUDA works in WSL), transformers 4.57.6, marker-pdf 0.3.10, surya-ocr 0.6.13. Disk space is not a constraint.
 
-**Ollama runs on the Windows host, not in WSL.** WSL uses NAT networking, so `localhost:11434` is unreachable from WSL; the host answers on the default gateway: `curl http://$(ip route show default | awk '{print $3}'):11434/api/tags` (the IP changes on reboot). The `ollama` Python client honours `OLLAMA_HOST`; `src/vision/orchestrator.py` hardcodes `localhost` and does not. Models pulled as of 2026-09-15: `llama3` (8B Q4_0), `llava` (7B Q4_0), `minicpm-v` (7.6B Q4_0). **There is no embedding model** — `nomic-embed-text` (the `OllamaEmbedder` default) must be pulled before indexing can work.
+**Ollama runs on the Windows host, not in WSL.** WSL uses NAT networking, so `localhost:11434` is unreachable from WSL; the host answers on the default gateway: `curl http://$(ip route show default | awk '{print $3}'):11434/api/tags` (the IP changes on reboot). The `ollama` Python client and `src/vision/orchestrator.py` both honour `OLLAMA_HOST`; export it before anything that talks to Ollama. Models pulled as of 2026-09-16: `nomic-embed-text` (137M F16, the `OllamaEmbedder` default), `llama3` (8B Q4_0, the `chat.model` default), `llava` (7B Q4_0), `minicpm-v` (7.6B Q4_0).
 
 **Rules for agents:**
 - **Ask the user first** before: loading Marker/Surya models, sending more than a handful of items to a local LLM/VLM, running `main.py` over a whole input directory (can mean hours of GPU time), pulling Ollama models, or installing/upgrading ML packages (torch, CUDA, transformers, marker, surya). Don't edit Windows-side settings (`.wslconfig`, Ollama config) — suggest the change instead.
@@ -44,13 +44,14 @@ python main.py config/<profile>.yaml --file "data/raw/<collection>/<book>.pdf"  
 # Chat over the index (embeds + generates via Ollama at OLLAMA_HOST; model/top_k/temperature from `chat:`)
 streamlit run app.py -- config/<profile>.yaml
 
-# Tests: CPU-only, temp dirs. tests/ is untracked, there is no pytest.ini, async tests need @pytest.mark.asyncio.
+# Tests: CPU-only, temp dirs, no network. No pytest.ini; async tests need @pytest.mark.asyncio.
+# test_settings.py's real-profile test reads the gitignored config/, so it fails in a fresh worktree.
 python -m pytest -q tests/
 ```
 
-`config/` is gitignored and the default `config/config.yaml` doesn't exist, so pass a profile explicitly. `config_template.yaml` is the only profile matching the current schema — but it enables Marker on GPU, `async_batch` OCR, indexing and summarisation, and its Qdrant `path` is a Windows path (on Linux it resolves to a `C:/...` folder under the project root). `config_eberron.yaml`, `config_vtm.yaml` and `config_vtm_clean.yaml` use legacy keys (`pipeline.mode`, `strip_regex`, …) that are silently ignored; `vtm_test.yaml` still names a non-existent `UniversalExtractor` fallback.
+`config/` is gitignored and the default `config/config.yaml` doesn't exist, so pass a profile explicitly. Profiles: `config_template.yaml` (reference; enables Marker on GPU, `async_batch` OCR, indexing and summarisation — don't run it as-is), `config_pilot.yaml` (5-book pilot), `config_text_corpus.yaml`, and `config_corpus_text.yaml` (every text-layer PDF, the 10 scanned clanbooks excluded so Marker never loads). The legacy-key profiles were deleted.
 
-**README vs. reality:** `main.py` takes the config path as a positional argument — there is no `--config` or `--action` flag; phases are gated by config booleans. `scripts/generate_master_config.py`, `scripts/resolve_batches.py` and `config/master_template.yaml` were deleted in commit `a6de4e6` (recover with `git show 216d610:<path>`), but the README still documents them.
+**README vs. reality:** the README was rewritten on 2026-09-15 to match the code, but still verify. `main.py` takes the config path as a positional argument; there is no `--config` or `--action` flag. `scripts/generate_master_config.py`, `scripts/resolve_batches.py` and `config/master_template.yaml` were deleted in commit `a6de4e6` (recover with `git show 216d610:<path>`).
 
 ## Architecture
 
@@ -59,22 +60,26 @@ python -m pytest -q tests/
 1. **`IngestionPipeline`** (`src/pipeline.py`) — dedup, extract, OCR, clean. Reads `io.input_targets`, writes markdown + YAML frontmatter to `io.directories.staging`, then writes the finished file to `io.directories.output`.
 2. **`IndexingPipeline`** (`src/index/pipeline.py`) — reads markdown from `io.directories.output`, chunks, optionally generates hierarchical summaries via `SummarisationPipeline` (`src/summary/pipeline.py`), embeds, and upserts to a vector store.
 
-`main.py` runs them in sequence. `IndexingPipeline` and `SummarisationPipeline` re-read the YAML as a raw dict via `initialize(config_path)` instead of taking the validated `Config`, so `load_config()` defaults/migrations don't apply there. Indexing processes every file concurrently (`asyncio.gather`) and uses random UUIDs as chunk IDs, so re-running it duplicates everything. There is no query/retrieval code yet.
+`main.py` runs them in sequence. `IndexingPipeline` and `SummarisationPipeline` re-read the YAML as a raw dict via `initialize(config_path)` instead of taking the validated `Config`, so `load_config()` defaults/migrations don't apply there. Indexing processes every file concurrently (`asyncio.gather`). Chunk IDs are deterministic (`uuid5` over filename/level/section/chunk index, `src/index/vectorstores.py`), so re-indexing overwrites rather than duplicates.
+
+### Retrieval and chat
+
+`query.py` (CLI top-k search) and `eval_golden.py` (recall harness) query the store directly. `app.py` is a Streamlit chat on top of `src/chat/rag.py`: `RagAnswerer.from_config` reuses `IndexingPipeline.initialize` for the embedder + store, retrieves `chat.top_k` chunks and streams a cited answer from `chat.model` via Ollama. Each question is independent (no session memory). All async work goes through one long-lived loop in `src/chat/async_bridge.py`: a cached `ollama.AsyncClient` is bound to the loop it first ran on, so calling `asyncio.run()` per Streamlit rerun fails on the second question with "Event loop is closed". The UI's score caption assumes ChromaDB distance (lower = closer); Qdrant scores run the other way.
 
 ### Resumable state machine via frontmatter
 
 `IngestionPipeline.process_file` stores `pipeline_phases: [extract, ocr, clean]` in each staged file's frontmatter, reloads it on every run, and only runs the missing phases; a file already in the output dir is skipped. Caveats:
-- A phase is recorded even when the step did nothing: `process_ocr` returns `False` both on success and on every failure path, so `ocr` in `pipeline_phases` doesn't prove OCR happened (Toreador's 189 image links resolve to no files, yet `ocr` is recorded).
+- `process_ocr` returns `"completed"`, `"suspended"` (async batch pending; the file stops here and resumes next run) or `"failed"`; `ocr` is only appended to `pipeline_phases` when it wasn't suspended or failed. In `passthrough` mode it returns `"completed"` without doing anything, so `ocr` in the phases still doesn't prove images were transcribed.
 - Staged/output files are keyed by filename stem only; same-named files in different folders collide.
 
 ### OCR modes (`src/vision/orchestrator.py`)
 
-`passthrough` (default) does nothing. `local_vlm` posts each image to Ollama synchronously (hardcoded `localhost`, no timeout). `async_batch` is meant to write a `.jobstate` under `io.directories.batch_jobs`, submit a Gemini batch, return `True` (suspend) and poll on the next run — but it cannot work as written: `batches.create()` lacks the required `model=`, job states are compared to lowercase strings instead of `JobState.JOB_STATE_*`, results are read from a non-existent `job.output_uri` (they're under `job.dest`), and the JSONL is written with literal `\n` separators. `sync_live` is a stub. The image-link regex `!\[.*?\]\((.*?)\)` breaks on paths containing `)`, e.g. `Toreador (revised)`.
+`passthrough` (default) does nothing. `local_vlm` posts each image to Ollama (host from `OLLAMA_HOST`, default `localhost`). `async_batch` writes a `.jobstate` under `io.directories.batch_jobs`, submits a Gemini batch (`src/vision/batch_manager.py`: `batches.create(model=, src=)`, `JobState.JOB_STATE_*` normalised to pending/running/succeeded/failed, results from `job.dest.file_name`), returns `"suspended"` and polls on the next run. The fixes are unit-tested with a fake `google.genai` (`tests/test_batch_manager.py`) but have never run against the real API. The image-link regex is greedy on the path, so paths containing `)` such as `Toreador (revised)` match.
 
 ### Registries + config, not conditionals
 
 Every pluggable stage implements an ABC from `src/core/interfaces.py` and is registered by string name:
-- `src/extract/registry.py` — `EXTRACTOR_REGISTRY`, selected per extension by `DocumentRouter` (`src/extract/factory.py`) from `config.file_rules[".ext"].extractor`. `fallback` is used only when the primary name is missing from the registry, not when extraction fails. The router constructs a **new extractor per file**, so `PdfExtractor` reloads all Marker models for every PDF.
+- `src/extract/registry.py` — `EXTRACTOR_REGISTRY`, selected per extension by `DocumentRouter` (`src/extract/factory.py`) from `config.file_rules[".ext"].extractor`. `fallback` is used only when the primary name is missing from the registry, not when extraction fails. The router caches one extractor instance per (class, params), so Marker models load once per run rather than once per PDF.
 - `src/index/registry.py` — `CHUNKER_REGISTRY`, `EMBEDDER_REGISTRY`, `VECTORSTORE_REGISTRY`.
 - Summariser selection is inline in `src/summary/pipeline.py` (`OllamaSummariser` / `GeminiSummariser`).
 
@@ -82,11 +87,11 @@ Every pluggable stage implements an ABC from `src/core/interfaces.py` and is reg
 
 ### Config system
 
-`src/config/settings.py` defines the `Config` schema; `load_config()` resolves relative config paths against the project root and migrates legacy `pipeline.targets`/`pipeline.output_dir` into `io.*`. Unknown keys are silently ignored (no `extra="forbid"`). Parsed but never used: per-extension `file_rules.*.cleanup_rules` (only the global `cleanup_rules` is applied), `save_intermediate`/`intermediate_suffix`, `io.directories.assets` (extractors write assets to `<staging>/../assets`), and `pipeline.dynamic_cleaner`. `DynamicLLMCleaner` and `DocumentRouter._check_pdf_text_density` exist but are never called.
+`src/config/settings.py` defines the `Config` schema; `load_config()` resolves relative config paths against the project root and migrates legacy `pipeline.targets`/`pipeline.output_dir` into `io.*`. Every model inherits `StrictModel` (`extra="forbid"`), so an unknown or misspelled key raises at load time. `main.py` and `RagAnswerer.from_config` call `load_config`, so the raw-YAML readers are covered on those paths. Parsed but never used: per-extension `file_rules.*.cleanup_rules` (only the global `cleanup_rules` is applied), `save_intermediate`/`intermediate_suffix`, `io.directories.assets` (extractors write assets to `<staging>/../assets`), and `pipeline.dynamic_cleaner`. `DynamicLLMCleaner` is tested (`tests/test_cleaning.py`) but never called. The PDF text-density check lives in `src/extract/pdf_density.py` and drives `AutoPdfExtractor`.
 
-### Known hazard: over-escaped string literals
+### Past hazard: over-escaped string literals
 
-Several files contain `"\\n"` where a newline was intended: `src/pipeline.py` (frontmatter — output files start with a literal `---\n`), `src/vision/orchestrator.py`, `src/extract/docx.py` (whole DOCX output lands on one line), `src/extract/image.py`, and `main.py`; `image.py`/`html.py` also use `"\\\\"` for a single backslash. Find them with `grep -rnF '\\n' --include=*.py src main.py`. The existing test only asserts `"clean" in result`, so it doesn't catch this.
+Earlier code used `"\\n"` where a newline was meant (frontmatter, DOCX output, OCR JSONL). Fixed in `ee81138`. `grep -rnF '\\n' --include=*.py src main.py` should now only hit `src/clean/dynamic_cleaner.py`, where the escapes are deliberate (regex text inside the LLM prompt). Re-run that grep after editing string-heavy code.
 
 ### Dependencies (do not casually upgrade)
 
