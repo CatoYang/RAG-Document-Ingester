@@ -1,8 +1,10 @@
-from typing import List
+import re
+from typing import List, Optional
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from rich.console import Console
 
 from src.core.interfaces import BaseChunker, Document, Chunk, SourceMetadata
+from src.extract.pdf_text import PAGE_MARKER_PATTERN
 
 console = Console()
 
@@ -34,6 +36,20 @@ class MarkdownChunker(BaseChunker):
             chunk_overlap=self.chunk_overlap,
         )
 
+    def _consume_page_markers(self, text: str, current_page: Optional[int]) -> tuple[str, Optional[int]]:
+        """Strips `PAGE_MARKER_PATTERN` comments (emitted by
+        PyMuPDF4LLMExtractor, one per page) out of chunk text, returning the
+        cleaned text and the page number in effect by the end of this chunk.
+        A chunk with no marker of its own inherits `current_page` from the
+        previous chunk, since it falls between two page boundaries."""
+        page_numbers = [int(m) for m in PAGE_MARKER_PATTERN.findall(text)]
+        if page_numbers:
+            current_page = page_numbers[-1]
+
+        cleaned = PAGE_MARKER_PATTERN.sub('', text)
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+        return cleaned, current_page
+
     async def chunk(self, doc: Document) -> List[Chunk]:
         console.print(f"[dim]Chunking {doc.source_file}...[/dim]")
 
@@ -44,6 +60,7 @@ class MarkdownChunker(BaseChunker):
         splits = self.text_splitter.split_documents(md_splits)
 
         chunks = []
+        current_page: Optional[int] = None
         for i, s in enumerate(splits):
             combined_meta = doc.metadata.copy()
             combined_meta.update(s.metadata)
@@ -57,16 +74,19 @@ class MarkdownChunker(BaseChunker):
             elif "Header 3" in s.metadata:
                 section = s.metadata["Header 3"]
 
+            text, current_page = self._consume_page_markers(s.page_content, current_page)
+            page_number = combined_meta.get("page_number", current_page)
+
             source_metadata = SourceMetadata(
                 filename=doc.source_file,
-                page_number=combined_meta.get("page_number", None),
+                page_number=page_number,
                 section=section,
                 chunk_index=i
             )
 
             chunks.append(
                 Chunk(
-                    text=s.page_content,
+                    text=text,
                     source_metadata=source_metadata,
                     metadata=combined_meta))
 

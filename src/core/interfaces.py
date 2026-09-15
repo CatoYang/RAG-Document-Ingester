@@ -76,11 +76,26 @@ class BaseEmbedder(ABC):
         pass
 
 
+class SearchResult(BaseModel):
+    """A single retrieval hit: the matched chunk text plus its stored
+    metadata and a similarity score (interpretation - higher is more similar
+    - is left to the caller; different stores use different distance
+    metrics, and this project doesn't yet normalize across them)."""
+    text: str
+    metadata: Dict[str, Any]
+    score: float
+
+
 class BaseVectorStore(ABC):
     """Abstract base class for all vector stores."""
 
     @abstractmethod
     async def upsert(self, chunks: List[Chunk], embeddings: List[List[float]]):
+        pass
+
+    @abstractmethod
+    async def search(self, query_embedding: List[float], top_k: int = 5) -> List["SearchResult"]:
+        """Returns the `top_k` chunks most similar to `query_embedding`."""
         pass
 
 

@@ -1,5 +1,6 @@
+import json
 from pathlib import Path
-import pymupdf
+from typing import Dict, Tuple
 from rich.console import Console
 
 from src.core.interfaces import BaseRouter, BaseExtractor
@@ -14,38 +15,27 @@ class DocumentRouter(BaseRouter):
 
     def __init__(self, config: Config):
         self.config = config
+        # Extractors (notably PdfExtractor/Marker) can be expensive to
+        # construct - they load a full set of GPU models. Without caching,
+        # every file in a multi-file run reloads them from scratch. Keyed by
+        # (extractor class, sorted params) so different file_rules using the
+        # same extractor with different params get distinct instances.
+        self._extractor_cache: Dict[Tuple[type, str], BaseExtractor] = {}
 
-    def _check_pdf_text_density(self, file_path: str) -> float:
-        """Calculates the average text density per page of a PDF."""
+    def _get_or_create_extractor(self, extractor_cls: type, params: dict) -> BaseExtractor:
         try:
-            doc = pymupdf.open(file_path)
-            total_text_length = 0
+            # json.dumps (not a tuple of .items()) so nested dict/list param
+            # values (e.g. AutoPdfExtractor's ocr_params) are still hashable
+            # as part of the cache key.
+            cache_key = (extractor_cls, json.dumps(params, sort_keys=True, default=str))
+        except TypeError:
+            # Still not serializable - fall back to an uncached instance
+            # rather than failing the whole run.
+            return extractor_cls(**params)
 
-            # Check up to first 5 pages for speed
-            pages_to_check = min(5, len(doc))
-            if pages_to_check == 0:
-                return 0.0
-
-            for i in range(pages_to_check):
-                page = doc.load_page(i)
-                text = page.get_text()
-                total_text_length += len(text.strip())
-
-            doc.close()
-
-            # Very basic heuristic: average characters per page
-            avg_chars_per_page = total_text_length / pages_to_check
-
-            # If avg chars is very low, it's likely a scanned image or heavily
-            # stylized
-            if avg_chars_per_page < 100:
-                return 0.05
-            return 1.0
-
-        except Exception as e:
-            console.print(
-                f"[bold red]Error checking PDF density: {e}[/bold red]")
-            return 0.0
+        if cache_key not in self._extractor_cache:
+            self._extractor_cache[cache_key] = extractor_cls(**params)
+        return self._extractor_cache[cache_key]
 
     def get_extractor(self, file_path: str) -> BaseExtractor:
         """Determines the appropriate extractor based on file extension and config."""
@@ -70,7 +60,6 @@ class DocumentRouter(BaseRouter):
             else:
                 raise
 
-        # Instantiate extractor passing params from file_rules
         console.print(
             f"[green]Routing {path.name} to {extractor_cls.__name__}...[/green]")
-        return extractor_cls(**rule.params)
+        return self._get_or_create_extractor(extractor_cls, rule.params)

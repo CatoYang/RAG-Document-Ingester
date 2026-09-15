@@ -6,9 +6,27 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import PointStruct, VectorParams, Distance
 from rich.console import Console
 
-from src.core.interfaces import BaseVectorStore, Chunk
+from src.core.interfaces import BaseVectorStore, Chunk, SearchResult
 
 console = Console()
+
+
+def _deterministic_id(chunk: Chunk) -> str:
+    """Derives a stable point ID from a chunk's identity (filename + level +
+    section + chunk_index) so re-running indexing on the same content
+    upserts (overwrites) existing vectors instead of duplicating them - the
+    prior implementation minted a fresh uuid4() per call, so every re-index
+    of the same file duplicated all of its chunks in the vector store.
+
+    Uses uuid5 rather than a plain hash digest because Qdrant point IDs must
+    be an unsigned int or a valid UUID string."""
+    key = "|".join([
+        chunk.source_metadata.filename,
+        str(chunk.metadata.get("level", "chunk")),
+        str(chunk.source_metadata.section or ""),
+        str(chunk.source_metadata.chunk_index),
+    ])
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
 
 class ChromaDBStore(BaseVectorStore):
@@ -35,7 +53,7 @@ class ChromaDBStore(BaseVectorStore):
         console.print(
             f"[dim]Upserting {len(chunks)} chunks into ChromaDB...[/dim]")
 
-        ids = [str(uuid.uuid4()) for _ in chunks]
+        ids = [_deterministic_id(chunk) for chunk in chunks]
         texts = [chunk.text for chunk in chunks]
         metadatas = []
 
@@ -60,6 +78,23 @@ class ChromaDBStore(BaseVectorStore):
             )
 
         await asyncio.to_thread(_do_upsert)
+
+    async def search(self, query_embedding: List[float], top_k: int = 5) -> List[SearchResult]:
+        def _do_query():
+            return self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
+
+        result = await asyncio.to_thread(_do_query)
+
+        documents = (result.get("documents") or [[]])[0]
+        metadatas = (result.get("metadatas") or [[]])[0]
+        distances = (result.get("distances") or [[]])[0]
+
+        # ChromaDB reports a distance (lower = more similar), not a
+        # similarity score - see SearchResult's docstring.
+        return [
+            SearchResult(text=doc, metadata=meta or {}, score=dist)
+            for doc, meta, dist in zip(documents, metadatas, distances)
+        ]
 
 
 class QdrantStore(BaseVectorStore):
@@ -107,7 +142,7 @@ class QdrantStore(BaseVectorStore):
 
             points.append(
                 PointStruct(
-                    id=str(uuid.uuid4()),
+                    id=_deterministic_id(chunk),
                     vector=embedding,
                     payload={"text": chunk.text, **meta}
                 )
@@ -117,3 +152,18 @@ class QdrantStore(BaseVectorStore):
             collection_name=self.collection_name,
             points=points
         )
+
+    async def search(self, query_embedding: List[float], top_k: int = 5) -> List[SearchResult]:
+        await self._ensure_collection()
+        hits = await self.client.search(
+            collection_name=self.collection_name,
+            query_vector=query_embedding,
+            limit=top_k,
+        )
+
+        results = []
+        for hit in hits:
+            payload = dict(hit.payload or {})
+            text = payload.pop("text", "")
+            results.append(SearchResult(text=text, metadata=payload, score=hit.score))
+        return results

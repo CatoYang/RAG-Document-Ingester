@@ -15,6 +15,9 @@ surya-ocr==0.6.13
 transformers>=4.45.2
 torch
 pymupdf
+pymupdf4llm
+pymupdf-layout
+python-dotenv
 python-docx
 beautifulsoup4
 markdownify

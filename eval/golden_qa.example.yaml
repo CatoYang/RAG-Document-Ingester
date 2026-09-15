@@ -1,0 +1,32 @@
+# Golden Q&A set for eval_golden.py (TODO.md Path 1.5 / Path 2).
+#
+# Copy this file to eval/golden_qa.yaml and replace every entry below with
+# real questions you already know the answer to (or can look up in the PDF
+# directly). These are placeholders showing the expected shape only - they
+# are NOT real facts about these books. Do not fill this in by guessing or
+# by having an LLM invent plausible-sounding answers: the whole point is to
+# catch retrieval failures against ground truth you actually trust.
+#
+# Fields:
+#   question:        the question text, as a user might type it
+#   expected_source: filename exactly as stored in chunk metadata - this is
+#                     Document.source_file, i.e. the original file's name
+#                     (e.g. "Toreador (revised).pdf", "Eberron Campaign
+#                     Setting.pdf")
+#   expected_page:   optional. If set, eval_golden.py only counts a hit when
+#                     the returned chunk's page_number is within
+#                     --page-tolerance (default 2) pages of this value.
+#                     Leave as `null` if you only care about the right book.
+#
+# Aim for 30-50 questions covering both collections (VTM and Eberron), mixing
+# easy lookups (a clan's signature Discipline) with harder ones that need
+# real comprehension (why two factions are in conflict).
+
+questions:
+  - question: "REPLACE ME: e.g. What is the Nosferatu clan's signature weakness?"
+    expected_source: "REPLACE ME: e.g. Nosferatu (revised).pdf"
+    expected_page: null
+
+  - question: "REPLACE ME: e.g. Which Eberron dragonmarked house controls Cannith forges?"
+    expected_source: "REPLACE ME: e.g. Eberron Campaign Setting.pdf"
+    expected_page: null

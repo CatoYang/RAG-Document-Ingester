@@ -2,6 +2,8 @@ from typing import Type
 from src.core.interfaces import BaseExtractor
 
 from src.extract.pdf import PdfExtractor
+from src.extract.pdf_text import PyMuPDF4LLMExtractor
+from src.extract.pdf_auto import AutoPdfExtractor
 from src.extract.universal import MarkItDownExtractor
 from src.extract.openoffice import OpenOfficeExtractor
 from src.extract.image import ImageExtractor
@@ -14,6 +16,8 @@ from src.extract.archive import ArchiveUnpacker
 
 EXTRACTOR_REGISTRY = {
     "PdfExtractor": PdfExtractor,
+    "PyMuPDF4LLMExtractor": PyMuPDF4LLMExtractor,
+    "AutoPdfExtractor": AutoPdfExtractor,
     "MarkItDownExtractor": MarkItDownExtractor,
     "OpenOfficeExtractor": OpenOfficeExtractor,
     "ImageExtractor": ImageExtractor,
