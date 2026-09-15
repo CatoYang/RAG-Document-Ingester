@@ -77,13 +77,15 @@ async def process_ocr(document: Document, config) -> str:
             console.print(f"[cyan]Found existing pending batch job for {document.source_file} (Job ID: {api_job_id}). Polling status...[/cyan]")
 
             bm = BatchManager(provider)
+            # Normalized by BatchManager.check_status to "pending"/"running"/
+            # "succeeded"/"failed"/"unknown" regardless of provider.
             status = bm.check_status(api_job_id)
 
-            if status in ["pending", "running", "processing"]:
+            if status in ["pending", "running"]:
                 console.print(f"[yellow]Batch job {api_job_id} is still {status}. Suspending pipeline.[/yellow]")
                 return "suspended"
 
-            elif status in ["succeeded", "completed", "finished"]:
+            elif status == "succeeded":
                 console.print(f"[bold green]Batch job {api_job_id} is COMPLETE! Downloading results...[/bold green]")
                 output_path = batch_dir / f"{jobstate_path.stem}_results.jsonl"
                 bm.download_results(api_job_id, str(output_path))
@@ -175,7 +177,7 @@ async def process_ocr(document: Document, config) -> str:
 
         bm = BatchManager(provider)
         try:
-            api_job_id = bm.submit_job(str(jsonl_path))
+            api_job_id = bm.submit_job(str(jsonl_path), model=model)
             jobstate_path = batch_dir / f"{job_id_local}.jobstate"
             state = {
                 "document": document.source_file,

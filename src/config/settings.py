@@ -1,19 +1,28 @@
 import yaml
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any
 
-class IODirectories(BaseModel):
+
+class StrictModel(BaseModel):
+    """Base for every config model: rejects unknown/misspelled keys instead
+    of silently dropping them (e.g. legacy `pipeline.mode`/`strip_regex`),
+    so a typo'd config fails loudly at `load_config()` instead of quietly
+    doing nothing."""
+    model_config = ConfigDict(extra="forbid")
+
+
+class IODirectories(StrictModel):
     assets: str = Field(default="data/staging/assets")
     staging: str = Field(default="data/staging")
     batch_jobs: str = Field(default="data/staging/batch_jobs")
     output: str = Field(default="data/output/final_markdown")
 
-class IOSettings(BaseModel):
+class IOSettings(StrictModel):
     input_targets: List[str] = Field(default_factory=lambda: ["data/raw"])
     directories: IODirectories = Field(default_factory=IODirectories)
 
-class PipelineStep(BaseModel):
+class PipelineStep(StrictModel):
     enabled: bool = Field(default=True)
     save_intermediate: bool = Field(default=False)
     intermediate_suffix: str = Field(default="_intermediate")
@@ -23,57 +32,57 @@ class OcrStep(PipelineStep):
     provider: str = Field(default="gemini")
     model: str = Field(default="gemini-1.5-flash")
 
-class PipelineSteps(BaseModel):
+class PipelineSteps(StrictModel):
     extract: PipelineStep = Field(default_factory=lambda: PipelineStep(intermediate_suffix="_raw"))
     ocr: OcrStep = Field(default_factory=lambda: OcrStep(intermediate_suffix="_ocr"))
     clean: PipelineStep = Field(default_factory=lambda: PipelineStep(intermediate_suffix="_clean"))
 
-class DeduplicationSettings(BaseModel):
+class DeduplicationSettings(StrictModel):
     enabled: bool = Field(default=True)
     method: str = Field(default="exact")
 
-class PipelineSettings(BaseModel):
+class PipelineSettings(StrictModel):
     steps: PipelineSteps = Field(default_factory=PipelineSteps)
     deduplication: DeduplicationSettings = Field(default_factory=DeduplicationSettings)
     dynamic_cleaner: Dict[str, Any] = Field(default_factory=dict)
 
-class CleanupSettings(BaseModel):
+class CleanupSettings(StrictModel):
     collapse_newlines: bool = Field(default=True)
     remove_zero_width_spaces: bool = Field(default=True)
     trim_trailing_whitespace: bool = Field(default=True)
     deduplicate_paragraphs: bool = Field(default=False)
     regex_removals: List[str] = Field(default_factory=list)
 
-class FileRule(BaseModel):
+class FileRule(StrictModel):
     extractor: str
     fallback: Optional[str] = None
     params: Dict[str, Any] = Field(default_factory=dict)
     cleanup_rules: Optional[CleanupSettings] = None
 
-class SummarisationSettings(BaseModel):
+class SummarisationSettings(StrictModel):
     enabled: bool = Field(default=False)
     provider: str = Field(default="ollama")
     params: Dict[str, Any] = Field(default_factory=dict)
 
-class ChunkerSettings(BaseModel):
+class ChunkerSettings(StrictModel):
     type: str = Field(default="MarkdownChunker")
     params: Dict[str, Any] = Field(default_factory=dict)
 
-class EmbedderSettings(BaseModel):
+class EmbedderSettings(StrictModel):
     type: str = Field(default="OllamaEmbedder")
     params: Dict[str, Any] = Field(default_factory=dict)
 
-class VectorStoreSettings(BaseModel):
+class VectorStoreSettings(StrictModel):
     type: str = Field(default="ChromaDBStore")
     params: Dict[str, Any] = Field(default_factory=dict)
 
-class IndexingSettings(BaseModel):
+class IndexingSettings(StrictModel):
     enabled: bool = Field(default=False)
     chunker: ChunkerSettings = Field(default_factory=ChunkerSettings)
     embedder: EmbedderSettings = Field(default_factory=EmbedderSettings)
     vectorstore: VectorStoreSettings = Field(default_factory=VectorStoreSettings)
 
-class Config(BaseModel):
+class Config(StrictModel):
     io: IOSettings = Field(default_factory=IOSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
     cleanup_rules: CleanupSettings = Field(default_factory=CleanupSettings)

@@ -1,8 +1,8 @@
 # Primer
 
-An enterprise-grade, configuration-driven document processing pipeline designed to prepare heterogeneous files for Retrieval-Augmented Generation (RAG). 
+A configuration-driven document ingestion pipeline that prepares heterogeneous files (PDF, Office docs, HTML, images, archives) for Retrieval-Augmented Generation. The current corpus is tabletop RPG sourcebooks (Vampire: The Masquerade, Eberron). Stages are chosen through string-keyed registries + Pydantic-validated YAML config, rather than conditionals in the pipeline code.
 
-Built heavily upon **SOLID** principles, this framework avoids hardcoding and relies entirely on dynamic registries and a central configuration system to orchestrate file extraction, cleaning, chunking, and embedding.
+This is a half-built experiment, not a finished product - see `TODO.md` for what's actually done vs. still open, and `CLAUDE.md` for this machine's hardware limits (an earlier pass tried to run models this hardware can't handle and stalled the project for weeks).
 
 ```
 This project was a quick experiment into RAG but i came into a lot of cleaning issues with old PDFs, poorly scanned documents that required OCR.  
@@ -16,78 +16,90 @@ Also tried to utilise free APIs by doing batch processing of extracted images to
 
 Then im realising that feeding the visual models a high DPI image of the entire page is a waste of processing and have to build a new substep to extract out text regions to save on processing....
 
-Then i moved to use the Marker package but found myself in dependency hell and my current hardware choking as vLLM demanded more than i can provide and it works terribly on WSL.  
-Decided to take time off to get another ubuntu bootable to work on to continue developing.  
-As of now, a older version (marker 0.3.10) works out of the box and im using it mainly for layout recognition.  
+Currently reworking the framework and testing applimentation with claude code.
 
 ---
 
 ## Architecture Overview
 
-The system is cleanly divided into three major phases:
+Two pipelines, chained through the filesystem:
 
-### Phase 1: Pre-processing, Extraction & Cleaning
-Filters exact duplicates using a two-stage Size + SHA-256 hash deduplicator. It then converts highly diverse file formats (PDFs, Word docs, Spreadsheets, HTML, presentations, and images) into standardized, clean Markdown. It utilizes native GPU OCR models (Marker/Surya) for complex PDFs and images, alongside robust python libraries (`pandas`, `python-docx`, `beautifulsoup4`) for text-heavy documents.
+### `IngestionPipeline` (`src/pipeline.py`)
+Filters exact duplicates using a Size + SHA-256 hash deduplicator, then converts diverse file formats (PDFs, Word docs, spreadsheets, HTML, presentations, archives, images, ebooks) into standardized Markdown, optionally OCRs embedded images, and applies regex-based cleanup. Reads `io.input_targets`, writes staged Markdown + YAML frontmatter to `io.directories.staging`, then the finished file to `io.directories.output`. Resumable: each staged file's frontmatter records which phases (`extract`/`ocr`/`clean`) already ran, so a re-run only does what's missing.
 
-### Phase 2: Hierarchical Summarisation (Agentic RAG)
-Generates high-level document and section summaries using an LLM (Ollama or Gemini) prior to chunking, ensuring semantic context is preserved for the index.
+### `IndexingPipeline` (`src/index/pipeline.py`)
+Reads Markdown from `io.directories.output`, chunks it by Markdown headers (falling back to recursive character splitting for oversized sections), optionally generates hierarchical document/section summaries via `SummarisationPipeline` (`src/summary/pipeline.py`), embeds each chunk, and upserts into a vector store. Re-running it is idempotent - chunks get a deterministic ID derived from `(filename, level, section, chunk_index)`, so re-indexing overwrites rather than duplicates.
 
-### Phase 3: Indexing
-Reads the cleaned Markdown, chunks it semantically based on Markdown headers, generates embeddings, and upserts the raw chunks and hierarchical summaries into a Vector Database.
+`main.py` runs both pipelines in sequence; each phase is gated by config booleans (`pipeline.steps.*.enabled`, `indexing.enabled`, `summarisation.enabled`). There is no `--action` flag - `main.py` takes the config path as a positional argument.
 
 ```mermaid
 graph TD
-    A[Raw Documents\n/data/raw] --> PRE[Deduplicator\nSize + SHA-256 Hash]
-    PRE --> B[Phase 1: Ingestion Pipeline]
-    B --> C{Document Router}
-    
-    C -->|PDF/Images| D[Marker/Surya OCR\nPyTorch GPU]
-    C -->|Word/Excel/HTML| E[Structured Extractors]
-    C -->|Archives| F[Archive Unpacker]
-    
-    D --> G[Cleaner Module\nRegex & LLM Sweep]
+    A[Raw Documents\ndata/raw] --> PRE[Deduplicator\nSize + SHA-256 Hash]
+    PRE --> B[IngestionPipeline]
+    B --> C{DocumentRouter}
+
+    C -->|Text-layer PDF| D1[PyMuPDF4LLMExtractor\nCPU, fast]
+    C -->|Scanned PDF| D2[PdfExtractor\nMarker/Surya, GPU]
+    C -->|Word/Excel/HTML/PPTX| E[Structured Extractors]
+    C -->|Archives| F[ArchiveUnpacker]
+
+    D1 --> G[OCR orchestrator\nimage links only]
+    D2 --> G
     E --> G
-    
-    G --> H[Staging Markdown\n/data/staging]
-    
-    H --> I[Phase 2 & 3: Indexing Pipeline]
-    I --> J[Hierarchical Summarisation]
-    J --> K[Markdown Chunker]
-    K --> L[Ollama Embedder]
+    G --> H[DocumentCleaner\nregex sweep]
+
+    H --> I[Staging Markdown\ndata/staging, data/output]
+
+    I --> J[IndexingPipeline]
+    J --> K[MarkdownChunker]
+    K --> L[OllamaEmbedder]
     L --> M[Vector Store\nChromaDB/Qdrant]
 ```
+
+`AutoPdfExtractor` (the recommended `.pdf` extractor - see Path 1.5 in `TODO.md`) measures each PDF's text density up front and only routes to Marker/Surya for image-only scans, so the 34 of 44 PDFs in the current corpus that already have a text layer never touch the GPU.
 
 ---
 
 ## Project Structure
 
 ```text
-├── main.py                     # CLI Entry point
-├── config/                     # Configuration directory
-│   ├── config.yaml             # Default configuration profile
-│   └── master_template.yaml    # Auto-generated reference of all possible config values
-├── scripts/
-│   └── generate_master_config.py # Script to regenerate the master template
-├── TODO.md                     # Backlog, advanced RAG roadmap, and open issues
+├── main.py                     # CLI entry point - runs IngestionPipeline then IndexingPipeline
+├── query.py                    # Minimal CLI: embed a question, search the vector store, print hits
+├── eval_golden.py              # Retrieval recall harness against eval/golden_qa.yaml
+├── config/                     # Configuration profiles (gitignored - not checked in)
+│   └── config_template.yaml    # Reference profile matching the current schema
+├── TODO.md                     # Backlog and open issues, in priority order
+├── CLAUDE.md                   # Actual (not aspirational) architecture notes + hardware limits
 ├── data/
 │   ├── raw/                    # Place raw files here, organized by campaign/type
-│   ├── staging/                # Cleaned, standardized markdown ready for indexing
-│   └── dbs/                    # Vector databases (ChromaDB, Qdrant) and local SQL DBs
+│   ├── staging/                # Intermediate markdown mid-pipeline
+│   ├── output/final_markdown/  # Finished markdown, ready for indexing
+│   └── dbs/                    # Vector databases (ChromaDB, Qdrant)
+├── tests/                      # pytest suite (gitignored - local only)
 └── src/
     ├── core/
-    │   └── interfaces.py       # Base classes (BaseExtractor, BaseChunker, Document, Chunk)
+    │   └── interfaces.py       # Base classes: BaseExtractor, BaseChunker, BaseEmbedder,
+    │                           # BaseVectorStore, Document, Chunk, SearchResult
     ├── config/
-    │   └── settings.py         # Pydantic schema enforcing config validation
-    ├── extractors/
-    │   └── ...                 # Dynamic routing and format-specific extractors
-    ├── summarisation/
-    │   └── pipeline.py         # Hierarchical summariser (Ollama/Gemini)
-    ├── indexing/
-    │   └── ...                 # Chunkers, Embedders, and Vector Stores
-    └── utils/
-        ├── cleaner.py          # Regex artifact removal
-        ├── deduplicator.py     # Fast exact file duplicate filter
-        └── dynamic_cleaner.py  # LLM-based hallucination cleaning
+    │   └── settings.py         # Pydantic schema (extra="forbid" - unknown keys raise, not vanish)
+    ├── extract/
+    │   ├── factory.py          # DocumentRouter: extension -> extractor, cached per (class, params)
+    │   ├── registry.py         # EXTRACTOR_REGISTRY
+    │   └── ...                 # One module per format (pdf, pdf_text, pdf_auto, docx, html, ...)
+    ├── clean/
+    │   ├── cleaner.py          # DocumentCleaner - static regex/whitespace/dedup sweep
+    │   └── dynamic_cleaner.py  # DynamicLLMCleaner - LLM-proposed regexes; not wired into the
+    │                           # pipeline yet, see TODO.md's Cross-Cutting section
+    ├── vision/
+    │   ├── orchestrator.py     # OCR modes: passthrough, local_vlm, async_batch, sync_live (stub)
+    │   └── batch_manager.py    # Async batch job submission/polling (Gemini/OpenAI/Anthropic)
+    ├── summary/
+    │   └── pipeline.py         # Hierarchical summariser (Ollama/Gemini), gated by summarisation.enabled
+    └── index/
+        ├── chunkers.py         # MarkdownChunker
+        ├── embedders.py        # OllamaEmbedder
+        ├── vectorstores.py     # ChromaDBStore, QdrantStore
+        └── registry.py         # CHUNKER_REGISTRY, EMBEDDER_REGISTRY, VECTORSTORE_REGISTRY
 ```
 
 ---
@@ -95,83 +107,76 @@ graph TD
 ## Getting Started
 
 ### Prerequisites
-1. **WSL2** (Ubuntu recommended)
-2. **Python 3.12+**
-3. **Ollama** installed locally (running on the host machine or within WSL). Ensure models like `minicpm-v` (for extraction) and `nomic-embed-text` (for embedding) are pulled.
+1. **WSL2** (Ubuntu) or native Linux.
+2. **Python 3.12+**.
+3. **Ollama**, reachable from wherever the pipeline runs. Pull `nomic-embed-text` (embedding) and whichever chat/vision model your OCR/summarisation config names (e.g. `minicpm-v`, `llama3`). If Ollama runs on a different host than the pipeline (e.g. Windows host, WSL client), set `OLLAMA_HOST` rather than relying on `localhost`.
 
 ### Installation
 ```bash
-# Create a virtual environment
 python -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
 > [!IMPORTANT]
-> **Dependency Pinning & Architecture Note**
-> We specifically use `marker-pdf==0.3.10`, `surya-ocr==0.6.13`, and `transformers==4.41.2`. Newer versions of `marker-pdf` (>= 1.0) forcibly deprecate the native PyTorch layout models in favor of the `surya-ocr-2` Vision Language Model. This VLM requires deploying a memory-heavy `vLLM` Docker server, which introduces severe API latency and hardware constraints. By pinning to the `0.3.x` branch, the pipeline seamlessly orchestrates the native layout extraction directly on the host GPU without a daemon server, avoiding severe memory overhead.
+> **Dependency pinning.** `marker-pdf==0.3.10` and `surya-ocr==0.6.13` are pinned deliberately: `marker-pdf>=1.0` swaps the native PyTorch layout/OCR models for the `surya-ocr-2` VLM behind a vLLM server, which is not viable on modest single-GPU hardware. See `CLAUDE.md` for this project's actual measured hardware limits before running anything GPU-heavy - it documents a specific incident where an earlier pass ignored this and broke the environment.
+
+### Config profiles
+`config/` is gitignored; there is no default `config/config.yaml`. Copy `config/config_template.yaml` (or write your own matching the schema in `src/config/settings.py`) to a profile of your choice and pass its path explicitly.
 
 ---
 
 ## Usage
 
-The CLI (`main.py`) acts as the entry point for all phases of the pipeline. You can manage multiple configuration profiles by pointing the `--config` flag to different `.yaml` files in the `config/` folder.
-
-### 1. Run the Extraction Pipeline (Phase 1)
-To run exact deduplication and convert files in `data/raw/` into cleaned markdown files in `data/staging/`:
 ```bash
-python main.py config/config.yaml
-```
-*Note: You can control the behavior of this phase via the `pipeline.steps` setting (e.g., toggling the `extract` or `clean` steps, and setting `save_intermediate: true` to dump uncleaned raw output).*
+# Full run: dedup -> extract -> OCR -> clean -> (chunk -> embed -> upsert if indexing.enabled)
+python main.py config/<profile>.yaml
 
-**To run a single file:**
-```bash
-python main.py config/config.yaml --file "my_document.pdf"
+# Single file, skips dedup - the recommended way to smoke-test a new config
+python main.py config/<profile>.yaml --file "data/raw/<collection>/<book>.pdf"
+
+# Once something is indexed: ask a question, see which file/page/section matched
+python query.py config/<profile>.yaml "what is the weakness of the Ahrimanes bloodline?"
+
+# Retrieval recall against a hand-written question set (see eval/golden_qa.example.yaml)
+python eval_golden.py config/<profile>.yaml eval/golden_qa.yaml
 ```
 
-### 2. Run the Indexing Pipeline (Phases 2 & 3)
-Once your files are cleaned and sitting in `data/output/`, ensure `indexing.enabled: true` in your config and run:
-```bash
-python main.py config/config.yaml
-```
+Toggle individual phases via `pipeline.steps.{extract,ocr,clean}.enabled`, and indexing/summarisation via `indexing.enabled` / `summarisation.enabled`.
 
 ---
 
 ## Configuration
 
-This framework avoids hardcoding entirely. Everything is configurable via profiles in the `config/` directory.
+Everything is driven by string-keyed registries + a YAML profile validated against `src/config/settings.py`'s Pydantic schema (`extra="forbid"`: an unknown or misspelled key raises at load time instead of being silently dropped).
 
-### The Master Template & Hooks
-The pipeline's full schema is defined by Pydantic models in `src/config/settings.py`. Whenever the code changes, a Git Pre-Commit hook automatically runs `scripts/generate_master_config.py` to rebuild the `config/master_template.yaml` file. 
-
-You should reference `config/master_template.yaml` to see all possible options you can pass into your active `config.yaml` profile.
-
-### Extractor Routing
-You can define exact behavior based on file extensions. For example, to handle PDFs using the Google Gemini Mega-Batch architecture:
+### Extractor routing
 ```yaml
 file_rules:
   .pdf:
-    extractor: "FreeTierMegaBatchExtractor" # Options: FreeTierMegaBatchExtractor, EnterpriseBatchExtractor, HybridPdfExtractor
-    fallback: "PdfTextExtractor"
+    extractor: "AutoPdfExtractor"      # routes to PyMuPDF4LLMExtractor (fast, CPU) or
+    fallback: "MarkItDownExtractor"    # PdfExtractor/Marker (GPU) based on measured text density
     params:
-      vlm_model: "gemini-3.7-flash"
-      dpi: 300
+      min_avg_chars_per_page: 100
+      ocr_extractor: "PdfExtractor"
+      ocr_params:
+        device: "cuda"
+        batch_size: 2                  # keep at 1-2 on constrained GPUs - see CLAUDE.md
 ```
+`fallback` is only used when `extractor` names a class missing from `EXTRACTOR_REGISTRY`, not when extraction itself fails.
 
-### Cleaner Module
-VLM models frequently hallucinate metadata. You can apply dynamic regex sweeps to strip these out across all extracted documents, or toggle a dynamic LLM cleaner.
+### Cleaner module
 ```yaml
 cleanup_rules:
   regex_removals:
     - '(?im)^.*The image shows.*$'
 ```
+`DynamicLLMCleaner` (LLM-proposed regex sweeps with a blast-radius safety check) exists and is tested (`tests/test_cleaning.py`) but isn't wired into `IngestionPipeline` yet - see `TODO.md`.
 
-### Indexing Setup
-You can easily hot-swap your Vector Database or Embedding model by changing the string pointers:
+### Indexing setup
 ```yaml
 indexing:
+  enabled: true
   chunker:
     type: "MarkdownChunker"
   embedder:
@@ -179,24 +184,19 @@ indexing:
     params:
       model: "nomic-embed-text"
   vectorstore:
-    type: "ChromaDBStore" # Easily swap to QdrantStore
+    type: "ChromaDBStore"              # or QdrantStore
     params:
       persist_directory: "data/dbs/chromadb"
+      collection_name: "text_corpus"
 ```
 
 ---
 
-## Extending the Framework & Roadmap
+## Extending the Framework
 
-To adhere to SOLID principles, you should **never** modify the `IngestionPipeline` or `IndexingPipeline` directly to add new formats. 
+Adding a new file format, chunker, embedder, or vector store never means editing `IngestionPipeline`/`IndexingPipeline`. Instead:
+1. Implement the relevant interface from `src/core/interfaces.py`.
+2. Register the class by name in the matching `registry.py`.
+3. Reference it by that name from a config profile.
 
-Instead:
-1. Create a new class inheriting from the appropriate interface in `src/core/interfaces.py`.
-2. Register it in the respective `registry.py` (e.g., `EXTRACTOR_REGISTRY`).
-3. Point to it in your active `config.yaml`.
-
-### Future Roadmap
-Check out the [`TODO.md`](./TODO.md) file for upcoming features and advanced RAG concepts we plan to build, including:
-- **Intelligent Curation:** Semantic fuzzy deduplication and document version clustering (Supersession vs. Temporal Indexing).
-- **Multi-Language Support:** Handling non-Latin character sets and integrating multilingual embedding models.
-- **Diagram Handling:** VLM extraction of flowcharts into Mermaid.js.
+See `TODO.md` for the current backlog and priority order (stabilisation → minimum viable pipeline → retrieval quality → OCR the scanned corpus → query interface).
