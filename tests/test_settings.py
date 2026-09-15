@@ -22,6 +22,22 @@ def test_valid_minimal_config_still_loads():
     Config(file_rules={".txt": {"extractor": "MarkItDownExtractor"}})
 
 
+def test_chat_section_defaults():
+    chat = Config().chat
+    assert chat.model == "llama3"
+    assert chat.top_k == 5
+    assert 0.0 <= chat.temperature <= 0.3
+
+
+def test_chat_section_rejects_unknown_keys_and_bad_values():
+    with pytest.raises(ValidationError):
+        Config(chat={"modle": "llama3"})
+    with pytest.raises(ValidationError):
+        Config(chat={"top_k": 0})
+    with pytest.raises(ValidationError):
+        Config(chat={"temperature": -1})
+
+
 @pytest.mark.parametrize("profile", [
     "config/config_template.yaml",
     "config/config_text_corpus.yaml",

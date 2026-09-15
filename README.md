@@ -138,6 +138,10 @@ python main.py config/<profile>.yaml --file "data/raw/<collection>/<book>.pdf"
 # Once something is indexed: ask a question, see which file/page/section matched
 python query.py config/<profile>.yaml "what is the weakness of the Ahrimanes bloodline?"
 
+# Chat UI: answers from the retrieved chunks only, with [n] citations and the chunks shown alongside.
+# Needs the chat model pulled in Ollama (`chat.model`, default llama3); `chat.top_k` / `chat.temperature` are optional.
+streamlit run app.py -- config/<profile>.yaml
+
 # Retrieval recall against a hand-written question set (see eval/golden_qa.example.yaml)
 python eval_golden.py config/<profile>.yaml eval/golden_qa.yaml
 ```

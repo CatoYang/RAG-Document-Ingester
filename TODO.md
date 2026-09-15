@@ -101,9 +101,9 @@
 > Builds on Path 1.5's `query.py`. Bumped ahead of source-expansion and performance work — a chat interface is what actually makes retrieval-quality decisions visible to a human instead of a recall percentage.
 
 ### MVP Chat Interface
-- [ ] **Build chat frontend** — Streamlit, Gradio, or FastAPI + HTML — on top of `query.py`, not a rewrite of it.
-- [ ] **Conversational RAG** — retrieve relevant chunks and feed as context to LLM (Ollama local or API).
-- [ ] **Source citation** — show which document/page/section each answer came from (page numbers only exist once Path 1.5's page-metadata work lands).
+- [x] **Build chat frontend** — `app.py` (repo root), Streamlit: `streamlit run app.py -- config/<profile>.yaml`. Chat history lives in `st.session_state` for display only. Retrieval reuses `query.py`'s path (`IndexingPipeline.initialize` builds the embedder + vector store, cached with `st.cache_resource`). All async work runs on one long-lived background event loop (`src/chat/async_bridge.py`): cached `ollama.AsyncClient`s keep connections bound to their first loop, so a fresh `asyncio.run()` per Streamlit rerun fails with "Event loop is closed" on the second question. Reproduced against a stub HTTP server and covered by `tests/test_async_bridge.py`. Config problems and an unreachable Ollama/store show up as `st.error`, not a stack trace. Not yet run live against Ollama.
+- [x] **Conversational RAG** — `src/chat/rag.py`: `RagAnswerer` embeds the question, takes the top `chat.top_k` chunks and streams an Ollama chat answer (`chat.model`, default `llama3`; `chat.temperature`, default 0.1) from a prompt of numbered context blocks. The prompt says to use only that context, cite `[n]`, and say plainly when the context doesn't cover the question. Empty retrieval skips the LLM call. Each question is answered independently (no session memory, see below). Covered by `tests/test_chat_rag.py`.
+- [x] **Source citation** — each context block is labelled with file, page (`page unknown` when the chunk has none) and section, and the model is told to cite `[n]`. Under every answer, an expander lists the retrieved chunks by rank with file, page, section, raw store score and full text, so a retrieval miss can be told apart from a bad generation. Citations aren't validated: nothing checks that a `[n]` exists or supports the claim.
 
 ### Enhanced Features
 - [ ] **Session memory** — maintain conversation history for multi-turn RPG Q&A.

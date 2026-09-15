@@ -24,6 +24,7 @@ markdownify
 pandas
 tabulate
 requests
+streamlit
 pytest
 pytest-cov
 pytest-asyncio

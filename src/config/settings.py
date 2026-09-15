@@ -82,6 +82,11 @@ class IndexingSettings(StrictModel):
     embedder: EmbedderSettings = Field(default_factory=EmbedderSettings)
     vectorstore: VectorStoreSettings = Field(default_factory=VectorStoreSettings)
 
+class ChatSettings(StrictModel):
+    model: str = Field(default="llama3")
+    top_k: int = Field(default=5, ge=1)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+
 class Config(StrictModel):
     io: IOSettings = Field(default_factory=IOSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
@@ -89,6 +94,7 @@ class Config(StrictModel):
     file_rules: Dict[str, FileRule] = Field(default_factory=dict)
     summarisation: SummarisationSettings = Field(default_factory=SummarisationSettings)
     indexing: IndexingSettings = Field(default_factory=IndexingSettings)
+    chat: ChatSettings = Field(default_factory=ChatSettings)
 
 def load_config(config_path: str = "config/config.yaml") -> Config:
     path = Path(config_path)

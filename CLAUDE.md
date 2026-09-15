@@ -41,6 +41,9 @@ source .venv/bin/activate
 python main.py config/<profile>.yaml
 python main.py config/<profile>.yaml --file "data/raw/<collection>/<book>.pdf"   # single file, skips dedup
 
+# Chat over the index (embeds + generates via Ollama at OLLAMA_HOST; model/top_k/temperature from `chat:`)
+streamlit run app.py -- config/<profile>.yaml
+
 # Tests: CPU-only, temp dirs. tests/ is untracked, there is no pytest.ini, async tests need @pytest.mark.asyncio.
 python -m pytest -q tests/
 ```
