@@ -31,6 +31,27 @@ async def test_chunker_recovers_page_numbers_from_markers():
 
 
 @pytest.mark.asyncio
+async def test_chunker_drops_empty_chunks():
+    """An empty chunk isn't just wasted work - OllamaEmbedder returns a
+    zero-length embedding for an empty prompt, which crashes ChromaDB's
+    upsert (reproduced against a real Ollama host and ChromaDB, 2026-09-15,
+    on content starting with a page marker and no leading header)."""
+    content = (
+        PAGE_MARKER_TEMPLATE.format(page=1) + "\n\n"
+        + "# Chapter One\n\nReal content here."
+    )
+    doc = Document(source_file="book.pdf", content=content, metadata={})
+
+    chunker = MarkdownChunker(chunk_size=1000, chunk_overlap=0)
+    chunks = await chunker.chunk(doc)
+
+    assert all(c.text for c in chunks)
+    # chunk_index must stay a contiguous 0..N-1 sequence over kept chunks,
+    # not a sparse index into the pre-filtering split list.
+    assert [c.source_metadata.chunk_index for c in chunks] == list(range(len(chunks)))
+
+
+@pytest.mark.asyncio
 async def test_chunker_handles_documents_without_page_markers():
     """Documents from extractors that don't emit page markers (everything
     except PyMuPDF4LLMExtractor, for now) must still chunk fine, with

@@ -61,7 +61,7 @@ class MarkdownChunker(BaseChunker):
 
         chunks = []
         current_page: Optional[int] = None
-        for i, s in enumerate(splits):
+        for s in splits:
             combined_meta = doc.metadata.copy()
             combined_meta.update(s.metadata)
 
@@ -75,13 +75,25 @@ class MarkdownChunker(BaseChunker):
                 section = s.metadata["Header 3"]
 
             text, current_page = self._consume_page_markers(s.page_content, current_page)
+
+            if not text:
+                # Splitting by header can produce an empty leading split when
+                # a document's content starts before its first header (or a
+                # split that was only ever a page marker). An empty chunk
+                # isn't just wasted work: OllamaEmbedder returns a
+                # zero-length embedding for an empty prompt, which crashes
+                # ChromaDB's upsert (IndexError, not caught until far from
+                # its actual cause) - so this must be filtered here, not
+                # merely treated as a later "nice to have".
+                continue
+
             page_number = combined_meta.get("page_number", current_page)
 
             source_metadata = SourceMetadata(
                 filename=doc.source_file,
                 page_number=page_number,
                 section=section,
-                chunk_index=i
+                chunk_index=len(chunks)
             )
 
             chunks.append(
