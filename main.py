@@ -48,7 +48,7 @@ async def async_main():
     # PHASE 4: INDEXING PIPELINE
     # ---------------------------------------------------------
     if config.indexing.enabled:
-        console.print(f"\\n[bold blue]Starting Indexing Pipeline[/bold blue]")
+        console.print(f"\n[bold blue]Starting Indexing Pipeline[/bold blue]")
         pipeline = IndexingPipeline()
         await pipeline.initialize(args.config)
         await pipeline.process_directory(config.io.directories.output)
@@ -57,11 +57,11 @@ async def async_main():
     # PHASE 5: SUMMARISATION
     # ---------------------------------------------------------
     if config.summarisation.enabled:
-        console.print(f"\\n[bold blue]Starting Summarisation Pipeline[/bold blue]")
+        console.print(f"\n[bold blue]Starting Summarisation Pipeline[/bold blue]")
         # To be implemented
         pass
 
-    console.print("\\n[bold green]Pipeline execution completed.[/bold green]")
+    console.print("\n[bold green]Pipeline execution completed.[/bold green]")
 
 def main():
     asyncio.run(async_main())

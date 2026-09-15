@@ -33,12 +33,12 @@ class ImageExtractor(BaseExtractor):
             return Document(source_file=file_path_obj.name, content="", metadata={"error": str(e)})
 
         try:
-            rel_to_md = os.path.relpath(out_img_path, output_dir).replace("\\\\", "/")
+            rel_to_md = os.path.relpath(out_img_path, output_dir).replace("\\", "/")
         except ValueError:
-            rel_to_md = str(out_img_path.resolve()).replace("\\\\", "/")
+            rel_to_md = str(out_img_path.resolve()).replace("\\", "/")
 
         # Output a simple markdown link
-        md_text = f"![{file_path_obj.stem}]({rel_to_md})\\n"
+        md_text = f"![{file_path_obj.stem}]({rel_to_md})\n"
 
         metadata = {
             "source": file_path_obj.name,

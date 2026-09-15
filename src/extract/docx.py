@@ -92,22 +92,22 @@ class DocxExtractor(BaseExtractor):
                                     if r_id in rel_id_to_file:
                                         filename = rel_id_to_file[r_id]
                                         if filename in media_mapping:
-                                            markdown_content.append(f"\\n![Image]({media_mapping[filename]})\\n")
+                                            markdown_content.append(f"\n![Image]({media_mapping[filename]})\n")
                         break
             elif element.tag.endswith('tbl'):
                 # It's a table
                 for t in doc.tables:
                     if t._element == element:
-                        markdown_content.append("\\n")
+                        markdown_content.append("\n")
                         for i, row in enumerate(t.rows):
-                            row_data = [cell.text.replace('\\n', ' ').strip() for cell in row.cells]
+                            row_data = [cell.text.replace('\n', ' ').strip() for cell in row.cells]
                             markdown_content.append("| " + " | ".join(row_data) + " |")
                             if i == 0:
                                 markdown_content.append("|" + "|".join(["---"] * len(row.cells)) + "|")
-                        markdown_content.append("\\n")
+                        markdown_content.append("\n")
                         break
 
-        content = "\\n\\n".join(markdown_content)
+        content = "\n\n".join(markdown_content)
         
         console.print(f"[green]Extracted {images_extracted} images from {file_path_obj.name}[/green]")
 

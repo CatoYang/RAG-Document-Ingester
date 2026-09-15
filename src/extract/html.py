@@ -82,9 +82,9 @@ class HtmlExtractor(BaseExtractor):
                             
                     # Update the HTML tag so markdownify builds the correct link
                     try:
-                        rel_to_md = os.path.relpath(out_img_path, output_dir).replace("\\\\", "/")
+                        rel_to_md = os.path.relpath(out_img_path, output_dir).replace("\\", "/")
                     except ValueError:
-                        rel_to_md = str(out_img_path.resolve()).replace("\\\\", "/")
+                        rel_to_md = str(out_img_path.resolve()).replace("\\", "/")
                         
                     img['src'] = rel_to_md
                     images_extracted += 1

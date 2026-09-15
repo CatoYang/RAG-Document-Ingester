@@ -88,15 +88,22 @@ class IngestionPipeline:
             from src.vision.orchestrator import process_ocr
             
             console.print(f"[cyan]Phase 2: Vision OCR (Mode: {steps.ocr.mode})...[/cyan]")
-            
-            # process_ocr might suspend processing (async batch) or complete immediately
-            suspended = await process_ocr(current_document, self.config)
-            
-            if suspended:
+
+            # process_ocr returns "completed", "suspended" (waiting on an async
+            # batch job), or "failed" - only "completed" may advance the phase,
+            # so a failure or an in-progress batch job gets retried on the next
+            # run instead of the pipeline silently treating un-OCR'd content as done.
+            ocr_result = await process_ocr(current_document, self.config)
+
+            if ocr_result == "suspended":
                 console.print(f"[yellow]>> {path.name} suspended. Awaiting Async Batch API completion.[/yellow]")
                 return
-                
-            # If not suspended, it's done!
+
+            if ocr_result == "failed":
+                console.print(f"[red]>> OCR failed for {path.name}. Will retry on the next run.[/red]")
+                return
+
+            # "completed"
             current_document.metadata["pipeline_phases"].append("ocr")
             await self._save_document(current_document, staging_path)
             phases = current_document.metadata["pipeline_phases"]
@@ -126,7 +133,7 @@ class IngestionPipeline:
 
     async def _save_document(self, document, output_path: Path):
         try:
-            frontmatter = f"---\\n{yaml.dump(document.metadata, sort_keys=False)}---\\n\\n"
+            frontmatter = f"---\n{yaml.dump(document.metadata, sort_keys=False)}---\n\n"
             final_content = frontmatter + document.content
 
             async with aiofiles.open(output_path, "w", encoding="utf-8") as f:
@@ -162,5 +169,5 @@ class IngestionPipeline:
         console.print(f"[cyan]Found {len(filtered)} files to process in the ETL pipeline.[/cyan]")
 
         for file in filtered:
-            console.print(f"\\n[bold]Processing: {file.name}[/bold]")
+            console.print(f"\n[bold]Processing: {file.name}[/bold]")
             await self.process_file(str(file))
