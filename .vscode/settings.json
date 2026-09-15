@@ -1,0 +1,9 @@
+{
+    "files.exclude": {
+        "/__pycache__": true,
+        "catboost_info/":true,
+        ".ipynb_checkpoints":true,
+        "pytest_cache":true,
+        ".pytest_cache":true
+    }
+}
