@@ -27,7 +27,9 @@ Earlier agent sessions pushed models and environments beyond this machine (the v
 - Check `nvidia-smi` and `free -h` before GPU work. Smoke-test with `--file` on a small text-layer PDF, with OCR and summarisation disabled.
 - Safe to run freely: `pytest`, PyMuPDF / `pymupdf4llm` on CPU (~0.25 s/page in layout mode, ~600 MB RAM; `page_chunks=True` yields `metadata["page_number"]`), MarkItDown.
 
-**Corpus shape (`data/raw`, 2026-09-15):** 44 PDFs, ~5,700 pages. 34 have a usable text layer (including four apparent copies of *Eberron Campaign Guide*); 10 VTM "(revised)" clanbooks are image-only scans that genuinely need OCR (`Gangrel (revised)` has a text layer, probably embedded OCR of unknown quality). Only `Toreador (revised)` has reached `data/output`; the vector DBs are effectively empty.
+**Corpus shape (`data/raw`, 2026-09-15):** 44 PDFs, ~5,700 pages. 33 have a usable text layer (≥100 chars/page, the `AutoPdfExtractor` threshold), including four byte-identical copies of *Eberron Campaign Guide* that dedup collapses to one. 11 are image-only scans that need OCR: 10 VTM "(revised)" clanbooks plus `eberron/Eberron Campaign Setting.pdf` (0 chars/page). `Gangrel (revised)` has a text layer (~630 chars/page), probably embedded OCR of unknown quality.
+
+**Index state (2026-09-16):** `config/config_corpus_text.yaml` indexed every text-layer book (plus the pilot's Marker-extracted `Toreador (revised)`) into ChromaDB collection `text_corpus`: 31 documents, 15,691 chunks, in 17m46s, all on CPU plus `nomic-embed-text`. Re-running that profile is idempotent.
 
 ## Commands
 
