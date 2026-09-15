@@ -32,16 +32,10 @@ class GeminiSummariser(BaseSummariser):
         self.client = genai.Client(api_key=api_key)
 
     async def summarise(self, text: str, context: Optional[str] = None) -> str:
-        prompt = "Summarise the following text briefly.
-
-"
+        prompt = "Summarise the following text briefly.\n\n"
         if context:
-            prompt += f"Context: {context}
-
-"
-        prompt += f"Text to summarise: {text}
-
-Summary:"
+            prompt += f"Context: {context}\n\n"
+        prompt += f"Text to summarise: {text}\n\nSummary:"
 
         response = await self.client.aio.models.generate_content(
             model=self.model_name,

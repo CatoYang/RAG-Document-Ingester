@@ -122,19 +122,19 @@ The CLI (`main.py`) acts as the entry point for all phases of the pipeline. You 
 ### 1. Run the Extraction Pipeline (Phase 1)
 To run exact deduplication and convert files in `data/raw/` into cleaned markdown files in `data/staging/`:
 ```bash
-python main.py --config config/config.yaml --action extract
+python main.py config/config.yaml
 ```
 *Note: You can control the behavior of this phase via the `pipeline.steps` setting (e.g., toggling the `extract` or `clean` steps, and setting `save_intermediate: true` to dump uncleaned raw output).*
 
 **To run a single file:**
 ```bash
-python main.py --config config/config.yaml --action extract --file "my_document.pdf"
+python main.py config/config.yaml --file "my_document.pdf"
 ```
 
 ### 2. Run the Indexing Pipeline (Phases 2 & 3)
-Once your files are cleaned and sitting in `data/staging/`, summarize, chunk, and embed them into your Vector Database:
+Once your files are cleaned and sitting in `data/output/`, ensure `indexing.enabled: true` in your config and run:
 ```bash
-python main.py --config config/config.yaml --action index
+python main.py config/config.yaml
 ```
 
 ---

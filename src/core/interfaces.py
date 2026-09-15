@@ -22,7 +22,7 @@ class BaseExtractor(ABC):
     """Abstract base class for all document extractors."""
 
     @abstractmethod
-    async def extract(self, file_path: str, **kwargs) -> Document:
+    def extract(self, file_path: str, **kwargs) -> Document:
         """
         Extracts content from a file and returns a Document object.
 

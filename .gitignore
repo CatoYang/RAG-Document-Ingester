@@ -5,3 +5,5 @@ GEMINI.md
 __pycache__*
 config/*
 !config/master_template.yaml
+.coverage
+.pytest_cache/

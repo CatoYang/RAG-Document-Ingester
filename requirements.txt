@@ -12,5 +12,16 @@ qdrant-client
 langchain-text-splitters
 marker-pdf==0.3.10
 surya-ocr==0.6.13
-transformers==4.41.2
+transformers>=4.45.2
 torch
+pymupdf
+python-docx
+beautifulsoup4
+markdownify
+pandas
+tabulate
+requests
+pytest
+pytest-cov
+pytest-asyncio
+

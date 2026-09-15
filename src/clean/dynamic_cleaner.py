@@ -20,12 +20,13 @@ class DynamicLLMCleaner:
         self.ollama_client = None
 
         if self.provider == 'gemini':
-            import google.generativeai as genai
-            api_key = self.params.get('api_key', '')
-            if api_key:
-                genai.configure(api_key=api_key)
-            self.gemini_model = genai.GenerativeModel(
-                self.params.get('model', 'gemini-1.5-flash'))
+            from google import genai
+            import os
+            api_key = self.params.get('api_key') or os.getenv('GEMINI_API_KEY')
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY must be provided")
+            self.gemini_client = genai.Client(api_key=api_key)
+            self.gemini_model_name = self.params.get('model', 'gemini-1.5-flash')
         elif self.provider == 'ollama':
             from ollama import AsyncClient
             self.ollama_client = AsyncClient(
@@ -72,8 +73,11 @@ Document Sample:
 {sample}
 """
         try:
-            if self.provider == 'gemini' and self.gemini_model:
-                response = await asyncio.to_thread(self.gemini_model.generate_content, prompt)
+            if self.provider == 'gemini' and getattr(self, 'gemini_client', None):
+                response = await self.gemini_client.aio.models.generate_content(
+                    model=self.gemini_model_name,
+                    contents=prompt
+                )
                 content = response.text
             elif self.provider == 'ollama' and self.ollama_client:
                 response = await self.ollama_client.chat(
