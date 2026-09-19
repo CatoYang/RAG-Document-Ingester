@@ -43,6 +43,11 @@ source .venv/bin/activate
 python main.py config/<profile>.yaml
 python main.py config/<profile>.yaml --file "data/raw/<collection>/<book>.pdf"   # single file, skips dedup
 
+# Textbook source audit (TODO.md Path T1): CPU-only, reads data/raw/textbooks/_candidates/<slug>/*,
+# reports a format/extraction recommendation per title; --write updates data/raw/textbooks/manifest.yaml
+# (keeps the user's `decision` block). Safe to run freely.
+python audit_sources.py [--book <slug>] [--write]
+
 # Chat over the index (embeds + generates via Ollama at OLLAMA_HOST; model/top_k/temperature from `chat:`)
 streamlit run app.py -- config/<profile>.yaml
 
@@ -63,6 +68,10 @@ python -m pytest -q tests/
 2. **`IndexingPipeline`** (`src/index/pipeline.py`) — reads markdown from `io.directories.output`, chunks, optionally generates hierarchical summaries via `SummarisationPipeline` (`src/summary/pipeline.py`), embeds, and upserts to a vector store.
 
 `main.py` runs them in sequence. `IndexingPipeline` and `SummarisationPipeline` re-read the YAML as a raw dict via `initialize(config_path)` instead of taking the validated `Config`, so `load_config()` defaults/migrations don't apply there. Indexing processes every file concurrently (`asyncio.gather`). Chunk IDs are deterministic (`uuid5` over filename/level/section/chunk index, `src/index/vectorstores.py`), so re-indexing overwrites rather than duplicates.
+
+### Textbook source audit
+
+The project is pivoting from RPG sourcebooks to textbooks (see `TODO.md`, Paths T1–T3). `audit_sources.py` + `src/audit/` measure each candidate file (PDF: provenance, text layer, TOC, printed page offset, maths fonts; EPUB: DRM, layout, headings, page-list, maths as MathML vs. LaTeX-in-`alt` images) and rank them in `src/audit/recommend.py`. It is standalone: nothing in `IngestionPipeline` reads the manifest yet. `EpubExtractor` still uses `epub2txt` (plain text, headings lost); the structure-preserving replacement is Path T2.
 
 ### Retrieval and chat
 
