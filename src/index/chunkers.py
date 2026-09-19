@@ -65,14 +65,17 @@ class MarkdownChunker(BaseChunker):
             combined_meta = doc.metadata.copy()
             combined_meta.update(s.metadata)
 
-            # Determine section from headers if present
+            # Determine section from headers if present. Prefer the most
+            # specific header: pymupdf4llm turns running page headers into
+            # H1s, so preferring H1 labelled most chunks of a book with the
+            # page header instead of the actual subsection title.
             section = None
-            if "Header 1" in s.metadata:
-                section = s.metadata["Header 1"]
+            if "Header 3" in s.metadata:
+                section = s.metadata["Header 3"]
             elif "Header 2" in s.metadata:
                 section = s.metadata["Header 2"]
-            elif "Header 3" in s.metadata:
-                section = s.metadata["Header 3"]
+            elif "Header 1" in s.metadata:
+                section = s.metadata["Header 1"]
 
             text, current_page = self._consume_page_markers(s.page_content, current_page)
 

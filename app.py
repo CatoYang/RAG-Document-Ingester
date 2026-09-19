@@ -43,12 +43,12 @@ def resolve_config_path(argv: List[str]) -> Path:
     return path
 
 
-def render_sources(sources: List[SearchResult]) -> None:
+def render_sources(sources: List[SearchResult], score_note: str) -> None:
     with st.expander(f"Retrieved chunks ({len(sources)})"):
         if not sources:
             st.write("No chunks were retrieved.")
             return
-        st.caption("Score is the vector store's raw value: ChromaDB distance, lower is closer.")
+        st.caption(score_note)
         for rank, result in enumerate(sources, start=1):
             meta = result.metadata
             source = meta.get("filename") or meta.get("source") or "?"
@@ -58,17 +58,17 @@ def render_sources(sources: List[SearchResult]) -> None:
             st.text(result.text)
 
 
-def render_message(message: Dict[str, Any]) -> None:
+def render_message(message: Dict[str, Any], score_note: str) -> None:
     with st.chat_message(message["role"]):
         if message.get("error"):
             st.error(message["content"])
         else:
             st.markdown(message["content"])
         if message["role"] == "assistant":
-            render_sources(message["sources"])
+            render_sources(message["sources"], score_note)
 
 
-def ask(answerer: RagAnswerer, question: str) -> Dict[str, Any]:
+def ask(answerer: RagAnswerer, question: str, score_note: str) -> Dict[str, Any]:
     loop = get_loop()
     try:
         with st.spinner("Searching the index..."):
@@ -76,7 +76,7 @@ def ask(answerer: RagAnswerer, question: str) -> Dict[str, Any]:
     except Exception as e:
         content = f"Retrieval failed. Is Ollama reachable via OLLAMA_HOST, with the embedding model pulled? ({type(e).__name__}: {e})"
         st.error(content)
-        render_sources([])
+        render_sources([], score_note)
         return {"role": "assistant", "content": content, "sources": [], "error": True}
 
     try:
@@ -84,10 +84,10 @@ def ask(answerer: RagAnswerer, question: str) -> Dict[str, Any]:
     except Exception as e:
         content = f"Generation failed. Is Ollama reachable via OLLAMA_HOST, with the chat model pulled? ({type(e).__name__}: {e})"
         st.error(content)
-        render_sources(sources)
+        render_sources(sources, score_note)
         return {"role": "assistant", "content": content, "sources": sources, "error": True}
 
-    render_sources(sources)
+    render_sources(sources, score_note)
     return {"role": "assistant", "content": text if isinstance(text, str) else "".join(map(str, text)), "sources": sources}
 
 
@@ -104,18 +104,20 @@ def main() -> None:
         st.error(f"Could not initialise the embedder/vector store from `{config_path}`: {type(e).__name__}: {e}")
         st.stop()
 
+    score_note = answerer.vectorstore.score_note
+
     messages: List[Dict[str, Any]] = st.session_state.setdefault("messages", [])
     for message in messages:
-        render_message(message)
+        render_message(message, score_note)
 
     question = st.chat_input("Ask about the indexed sourcebooks")
     if not question:
         return
 
     messages.append({"role": "user", "content": question})
-    render_message(messages[-1])
+    render_message(messages[-1], score_note)
     with st.chat_message("assistant"):
-        messages.append(ask(answerer, question))
+        messages.append(ask(answerer, question, score_note))
 
 
 main()

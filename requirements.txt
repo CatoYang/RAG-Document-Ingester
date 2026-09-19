@@ -25,6 +25,7 @@ pandas
 tabulate
 requests
 streamlit
+mmh3
 pytest
 pytest-cov
 pytest-asyncio

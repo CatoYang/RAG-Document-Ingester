@@ -13,7 +13,10 @@ class OllamaEmbedder(BaseEmbedder):
     def __init__(self, **kwargs):
         self.params = kwargs
         self.model = self.params.get('model', 'nomic-embed-text')
-        self.client = AsyncClient()
+        # Without a timeout, ollama's httpx client waits forever if Ollama
+        # stops responding - callers (e.g. Streamlit chat retrieval) hang
+        # instead of surfacing an error.
+        self.client = AsyncClient(timeout=self.params.get('timeout', 60.0))
 
     async def embed(self, texts: List[str]) -> List[List[float]]:
         console.print(

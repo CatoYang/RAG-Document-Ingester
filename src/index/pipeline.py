@@ -5,6 +5,7 @@ import aiofiles
 from pathlib import Path
 from rich.console import Console
 
+from src.config.settings import ChunkDedupSettings
 from src.core.interfaces import Document
 from src.index.registry import get_chunker_class, get_embedder_class, get_vectorstore_class
 
@@ -17,6 +18,7 @@ class IndexingPipeline:
         self.chunker = None
         self.embedder = None
         self.vectorstore = None
+        self.chunk_dedup = ChunkDedupSettings()
 
     async def initialize(self, config_path: str = "config/config.yaml"):
         path = Path(config_path)
@@ -46,6 +48,8 @@ class IndexingPipeline:
         vectorstore_cls = get_vectorstore_class(
             vectorstore_cfg.get('type', 'ChromaDBStore'))
         self.vectorstore = vectorstore_cls(**vectorstore_cfg.get('params', {}))
+
+        self.chunk_dedup = ChunkDedupSettings(**indexing_config.get('chunk_dedup', {}))
 
         # Instantiate SummarisationPipeline
         from src.summary.pipeline import SummarisationPipeline
@@ -125,8 +129,14 @@ class IndexingPipeline:
             texts_to_embed = [c.text for c in chunks]
             embeddings = await self.embedder.embed(texts_to_embed)
 
-            # 5. Upsert raw chunks
-            await self.vectorstore.upsert(chunks, embeddings)
+            # 5. Drop chunks that are a near-duplicate of a chunk already in
+            # the store from a *different* file (opt-in, see chunk_dedup)
+            if self.chunk_dedup.enabled:
+                chunks, embeddings = await self._drop_near_duplicate_chunks(chunks, embeddings)
+
+            # 6. Upsert raw chunks
+            if chunks:
+                await self.vectorstore.upsert(chunks, embeddings)
 
             console.print(
                 f"[bold blue]Successfully indexed {filename} ({len(chunks)} chunks, hierarchical summaries: {self.summarisation.enabled})[/bold blue]")
@@ -134,6 +144,31 @@ class IndexingPipeline:
         except Exception as e:
             console.print(
                 f"[bold red]Failed to index {filename}: {e}[/bold red]")
+
+    async def _drop_near_duplicate_chunks(self, chunks, embeddings):
+        """Filters out chunks whose closest existing match in the store
+        already came from a *different* file and is within
+        `chunk_dedup.threshold` similarity. Same-file matches are never
+        dropped: re-indexing a file's own chunk is an idempotent overwrite
+        (deterministic chunk IDs, see `_deterministic_id` in
+        src/index/vectorstores.py), not a duplicate to remove."""
+        kept_chunks, kept_embeddings = [], []
+        for chunk, embedding in zip(chunks, embeddings):
+            hits = await self.vectorstore.search(embedding, top_k=1)
+            hit = hits[0] if hits else None
+            hit_filename = hit.metadata.get("filename") if hit else None
+            if (
+                hit is not None
+                and hit_filename
+                and hit_filename != chunk.source_metadata.filename
+                and self.vectorstore.is_duplicate_score(hit.score, self.chunk_dedup.threshold)
+            ):
+                console.print(
+                    f"[dim]Skipping near-duplicate chunk (matches {hit_filename})[/dim]")
+                continue
+            kept_chunks.append(chunk)
+            kept_embeddings.append(embedding)
+        return kept_chunks, kept_embeddings
 
     async def process_directory(self, directory: str):
         dir_path = Path(directory)

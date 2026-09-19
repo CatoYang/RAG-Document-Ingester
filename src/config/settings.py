@@ -41,9 +41,19 @@ class DeduplicationSettings(StrictModel):
     enabled: bool = Field(default=True)
     method: str = Field(default="exact")
 
+class FamilyClusteringSettings(StrictModel):
+    """Defaults for find_document_families.py's MinHash near-duplicate/
+    family clustering (TODO.md Path 2). Not consumed anywhere in the
+    IngestionPipeline/IndexingPipeline - this only configures the standalone
+    script, which reads it via load_config()."""
+    threshold: float = Field(default=0.95, ge=0.0, le=1.0)
+    shingle_size: int = Field(default=5, ge=1)
+    num_perm: int = Field(default=64, ge=8)
+
 class PipelineSettings(StrictModel):
     steps: PipelineSteps = Field(default_factory=PipelineSteps)
     deduplication: DeduplicationSettings = Field(default_factory=DeduplicationSettings)
+    family_clustering: FamilyClusteringSettings = Field(default_factory=FamilyClusteringSettings)
     dynamic_cleaner: Dict[str, Any] = Field(default_factory=dict)
 
 class CleanupSettings(StrictModel):
@@ -76,16 +86,26 @@ class VectorStoreSettings(StrictModel):
     type: str = Field(default="ChromaDBStore")
     params: Dict[str, Any] = Field(default_factory=dict)
 
+class ChunkDedupSettings(StrictModel):
+    """Gates the pre-upsert cosine-similarity check in IndexingPipeline
+    (TODO.md Path 2's "vector DB cosine similarity check"). Off by default:
+    it's only meaningful against a cosine-distance vector store, and the
+    live text_corpus ChromaDB collection is still L2 pending a re-index."""
+    enabled: bool = Field(default=False)
+    threshold: float = Field(default=0.99, ge=0.0, le=1.0)
+
 class IndexingSettings(StrictModel):
     enabled: bool = Field(default=False)
     chunker: ChunkerSettings = Field(default_factory=ChunkerSettings)
     embedder: EmbedderSettings = Field(default_factory=EmbedderSettings)
     vectorstore: VectorStoreSettings = Field(default_factory=VectorStoreSettings)
+    chunk_dedup: ChunkDedupSettings = Field(default_factory=ChunkDedupSettings)
 
 class ChatSettings(StrictModel):
     model: str = Field(default="llama3")
     top_k: int = Field(default=5, ge=1)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    timeout: float = Field(default=60.0, gt=0.0)
 
 class Config(StrictModel):
     io: IOSettings = Field(default_factory=IOSettings)

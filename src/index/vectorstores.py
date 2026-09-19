@@ -32,6 +32,8 @@ def _deterministic_id(chunk: Chunk) -> str:
 class ChromaDBStore(BaseVectorStore):
     """Local vector store using ChromaDB."""
 
+    score_note = "Score is ChromaDB's distance: lower is closer."
+
     def __init__(self, **kwargs):
         self.params = kwargs
         persist_dir = self.params.get('persist_directory', 'data/chromadb')
@@ -46,8 +48,14 @@ class ChromaDBStore(BaseVectorStore):
             'collection_name', 'default_collection')
 
         self.client = chromadb.PersistentClient(path=str(persist_path))
+        # Without this, Chroma defaults new collections to L2 distance on
+        # unnormalised vectors, which can rank differently than cosine
+        # similarity (the metric QdrantStore uses). Only takes effect on
+        # collection creation - an existing collection keeps whatever space
+        # it was created with, so switching this requires a re-index.
         self.collection = self.client.get_or_create_collection(
-            name=collection_name)
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"})
 
     async def upsert(self, chunks: List[Chunk], embeddings: List[List[float]]):
         console.print(
@@ -96,9 +104,18 @@ class ChromaDBStore(BaseVectorStore):
             for doc, meta, dist in zip(documents, metadatas, distances)
         ]
 
+    def is_duplicate_score(self, score: float, threshold: float) -> bool:
+        # Cosine distance = 1 - cosine similarity, so a `threshold` (e.g.
+        # 0.99) similarity match is a distance <= 1 - threshold. Only
+        # meaningful for a cosine-space collection (see the hnsw:space fix
+        # above) - meaningless against an existing L2 collection.
+        return score <= (1.0 - threshold)
+
 
 class QdrantStore(BaseVectorStore):
     """Vector store using Qdrant asynchronously."""
+
+    score_note = "Score is Qdrant's cosine similarity: higher is closer."
 
     def __init__(self, **kwargs):
         self.params = kwargs
@@ -167,3 +184,7 @@ class QdrantStore(BaseVectorStore):
             text = payload.pop("text", "")
             results.append(SearchResult(text=text, metadata=payload, score=hit.score))
         return results
+
+    def is_duplicate_score(self, score: float, threshold: float) -> bool:
+        # Qdrant reports cosine similarity directly - higher is closer.
+        return score >= threshold

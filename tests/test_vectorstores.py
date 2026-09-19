@@ -1,7 +1,7 @@
 import pytest
 
 from src.core.interfaces import Chunk, SourceMetadata
-from src.index.vectorstores import ChromaDBStore, _deterministic_id
+from src.index.vectorstores import ChromaDBStore, QdrantStore, _deterministic_id
 
 
 def _make_chunk(filename, chunk_index, text="hello world"):
@@ -50,3 +50,22 @@ async def test_chromadb_search_returns_matching_chunk(tmp_path):
     assert results[0].text == "the nosferatu clan hides in the sewers"
     assert results[0].metadata["filename"] == "book.pdf"
     assert results[0].metadata["page_number"] == 3
+
+
+def test_chromadb_is_duplicate_score_reads_distance_direction(tmp_path):
+    store = ChromaDBStore(persist_directory=str(tmp_path / "chromadb"), collection_name="test")
+
+    # Cosine distance = 1 - similarity, so a 0.99-similarity match is a
+    # distance <= 0.01.
+    assert store.is_duplicate_score(0.0, threshold=0.99) is True
+    assert store.is_duplicate_score(0.01, threshold=0.99) is True
+    assert store.is_duplicate_score(0.5, threshold=0.99) is False
+
+
+def test_qdrant_is_duplicate_score_reads_similarity_direction(tmp_path):
+    store = QdrantStore(path=str(tmp_path / "qdrant"), collection_name="test")
+
+    # Qdrant reports cosine similarity directly - higher is closer.
+    assert store.is_duplicate_score(1.0, threshold=0.99) is True
+    assert store.is_duplicate_score(0.99, threshold=0.99) is True
+    assert store.is_duplicate_score(0.5, threshold=0.99) is False

@@ -66,7 +66,7 @@ python -m pytest -q tests/
 
 ### Retrieval and chat
 
-`query.py` (CLI top-k search) and `eval_golden.py` (recall harness) query the store directly. `app.py` is a Streamlit chat on top of `src/chat/rag.py`: `RagAnswerer.from_config` reuses `IndexingPipeline.initialize` for the embedder + store, retrieves `chat.top_k` chunks and streams a cited answer from `chat.model` via Ollama. Each question is independent (no session memory). All async work goes through one long-lived loop in `src/chat/async_bridge.py`: a cached `ollama.AsyncClient` is bound to the loop it first ran on, so calling `asyncio.run()` per Streamlit rerun fails on the second question with "Event loop is closed". The UI's score caption assumes ChromaDB distance (lower = closer); Qdrant scores run the other way.
+`query.py` (CLI top-k search) and `eval_golden.py` (recall harness) query the store directly. `app.py` is a Streamlit chat on top of `src/chat/rag.py`: `RagAnswerer.from_config` reuses `IndexingPipeline.initialize` for the embedder + store, retrieves `chat.top_k` chunks and streams a cited answer from `chat.model` via Ollama. Each question is independent (no session memory). All async work goes through one long-lived loop in `src/chat/async_bridge.py`: a cached `ollama.AsyncClient` is bound to the loop it first ran on, so calling `asyncio.run()` per Streamlit rerun fails on the second question with "Event loop is closed". The UI's score caption is derived from `BaseVectorStore.score_note` (`src/core/interfaces.py`, overridden per store in `src/index/vectorstores.py`) rather than hardcoded, since ChromaDB distance (lower = closer) and Qdrant cosine similarity (higher = closer) read in opposite directions.
 
 ### Resumable state machine via frontmatter
 

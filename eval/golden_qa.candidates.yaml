@@ -1,0 +1,132 @@
+# Candidate entries for eval/golden_qa.yaml (TODO.md Path 1.5).
+#
+# NOT valid input for eval_golden.py as-is, and must never be renamed
+# straight to golden_qa.yaml. Every expected_source/expected_page below came
+# from running the *current* retrieval system against itself (query top-1 on
+# the indexed text_corpus collection, 2026-09-16) - it proves what the index
+# currently returns, not what the books actually say. eval_golden.py's own
+# docstring is explicit that fabricated or retrieval-derived expected values
+# make the recall number meaningless, since a broken retriever would just
+# grade itself as correct.
+#
+# How to use this file:
+#   1. For each entry, open the named file at the given page (or nearby -
+#      pymupdf4llm page numbers are 0-indexed from the PDF, so check +/-1)
+#      and confirm it actually answers the question.
+#   2. If it does: copy the entry into eval/golden_qa.yaml as-is (or fix
+#      expected_page if the real answer is a page or two off).
+#   3. If it doesn't: either find the real page yourself and use that, or
+#      drop the question.
+#   4. Entries flagged SUSPICIOUS below are near-certain misses - the
+#      retriever returned the only indexed clanbook with a text layer
+#      (Gangrel) for clans whose actual books are still unindexed scans
+#      (Path 3). Keep only if you want a known-miss regression case, marked
+#      as such; otherwise discard.
+#
+# Only 24 candidates here, covering VTM clan/discipline basics and Eberron
+# geography/lore - the golden set target is 30-50, so eval/golden_qa.yaml
+# will still need more once these are verified.
+
+candidates:
+  - question: What is the Nosferatu clan's signature weakness?
+    expected_source: "Vampire the Masquerade 5E-Camarilla.md"
+    expected_page: 156
+
+  - question: What is the Malkavian clan's signature weakness?
+    expected_source: "Vampire the Masquerade 5E-Core Rules.md"
+    expected_page: 78
+
+  - question: What is the Toreador clan's signature weakness?
+    expected_source: "Gangrel (revised).md"
+    expected_page: 56
+    note: "SUSPICIOUS - Toreador (revised).pdf is a scanned clanbook not in this profile's index; Gangrel showing up here is almost certainly a false positive."
+
+  - question: What is the Ravnos clan's signature weakness?
+    expected_source: "Gangrel (revised).md"
+    expected_page: 56
+    note: "SUSPICIOUS - same as Toreador above; Ravnos (revised).pdf isn't indexed."
+
+  - question: What is the Tremere clan's signature weakness?
+    expected_source: "Vampire the Masquerade 5E-Forbidden Religions.md"
+    expected_page: 30
+
+  - question: What is the Brujah clan's signature bane?
+    expected_source: "Vampire the Masquerade 5E-Core Rules.md"
+    expected_page: 69
+
+  - question: What is the Assamite clan's signature weakness?
+    expected_source: "Gangrel (revised).md"
+    expected_page: 55
+    note: "SUSPICIOUS - same as Toreador above; Assamite (revised).pdf isn't indexed."
+
+  - question: What is the Giovanni clan's signature weakness?
+    expected_source: "Vampire the Masquerade 5E-Cults of the Blood Gods.md"
+    expected_page: 133
+
+  - question: What is the Lasombra clan's signature weakness?
+    expected_source: "Vampire the Masquerade 5E-Chicago by Night.md"
+    expected_page: 291
+
+  - question: What disciplines does the Gangrel clan favor?
+    expected_source: "Vampire the Masquerade 5E-Core Rules.md"
+    expected_page: 72
+
+  - question: What is Obfuscate used for?
+    expected_source: "Vampire the Masquerade 5E-Camarilla.md"
+    expected_page: 168
+
+  - question: "What is the Masquerade in Vampire: The Masquerade?"
+    expected_source: "Toreador (revised).md"
+    expected_page: null
+    note: "This file has no page markers (it was Marker-extracted in an earlier pilot session, not via PyMuPDF4LLMExtractor), so expected_page can't be checked by page number - verify by reading the file directly."
+
+  - question: What is a Blood Bond?
+    expected_source: "Vampire the Masquerade 5E-Core Rules.md"
+    expected_page: 236
+
+  - question: Which dragonmarked house controls Cannith forges?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 39
+
+  - question: Which dragonmarked house is associated with House Cannith?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 39
+    note: "Near-duplicate of the Cannith question above - drop one before promoting."
+
+  - question: What is the Mark of Making?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 211
+
+  - question: What is the Mark of Finding?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 231
+
+  - question: What are the Five Nations of Khorvaire?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 6
+
+  - question: What happened during the Last War in Eberron?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 12
+
+  - question: What is the Silver Flame in Eberron?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 247
+
+  - question: What is the city of Sharn known for?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 53
+
+  - question: What are the Chosen in Eberron cosmology?
+    expected_source: "AE01-05 - Convergence Manifesto - Perfect Timing.md"
+    expected_page: 7
+    note: "Low confidence - 'Chosen' may be too generic a term to have surfaced the actual canonical source; double-check against Eberron Campaign Guide.md too."
+
+  - question: What is a warforged in Eberron?
+    expected_source: "Eberron Campaign Guide.md"
+    expected_page: 94
+
+  - question: What is the Mournland?
+    expected_source: "AE01-11 - Convergence Manifesto - A Heart in Mourning.md"
+    expected_page: 6
+    note: "Low confidence - Mournland is core Eberron lore, so Eberron Campaign Guide.md likely has a more canonical page; double-check there too."

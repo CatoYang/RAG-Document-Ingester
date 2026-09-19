@@ -89,6 +89,11 @@ class SearchResult(BaseModel):
 class BaseVectorStore(ABC):
     """Abstract base class for all vector stores."""
 
+    #: Human-readable note on how to read `SearchResult.score` for this
+    #: store, since the direction (lower vs. higher is closer) differs by
+    #: store/metric. Overridden per subclass.
+    score_note: str = "Score is the vector store's raw value; direction of 'closer' is store-specific."
+
     @abstractmethod
     async def upsert(self, chunks: List[Chunk], embeddings: List[List[float]]):
         pass
@@ -96,6 +101,14 @@ class BaseVectorStore(ABC):
     @abstractmethod
     async def search(self, query_embedding: List[float], top_k: int = 5) -> List["SearchResult"]:
         """Returns the `top_k` chunks most similar to `query_embedding`."""
+        pass
+
+    @abstractmethod
+    def is_duplicate_score(self, score: float, threshold: float) -> bool:
+        """Whether a `SearchResult.score` from this store represents a match
+        at least as close as `threshold` (0-1 similarity). Centralizes the
+        per-store score direction (see `score_note`) so callers never have
+        to know whether lower or higher is closer."""
         pass
 
 

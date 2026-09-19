@@ -37,10 +37,19 @@ class OllamaChatGenerator:
     """Streams a chat completion from Ollama. The host comes from
     `OLLAMA_HOST` unless given explicitly."""
 
-    def __init__(self, model: str, temperature: float, host: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        temperature: float,
+        host: Optional[str] = None,
+        timeout: float = 60.0,
+    ) -> None:
         self.model = model
         self.temperature = temperature
-        self.client = AsyncClient(host=host)
+        # Without a timeout, ollama's httpx client waits forever - if Ollama
+        # stops responding mid-answer, the Streamlit page just hangs instead
+        # of surfacing st.error (see TODO.md Path 5 known issues).
+        self.client = AsyncClient(host=host, timeout=timeout)
 
     async def stream(self, messages: List[Message]) -> AsyncIterator[str]:
         response = await self.client.chat(
@@ -95,7 +104,7 @@ class RagAnswerer:
         chat = load_config(config_path).chat
         pipeline = IndexingPipeline()
         await pipeline.initialize(config_path)
-        generator = OllamaChatGenerator(model=chat.model, temperature=chat.temperature)
+        generator = OllamaChatGenerator(model=chat.model, temperature=chat.temperature, timeout=chat.timeout)
         return cls(pipeline.embedder, pipeline.vectorstore, generator, top_k=chat.top_k)
 
     async def retrieve(self, question: str) -> List[SearchResult]:
